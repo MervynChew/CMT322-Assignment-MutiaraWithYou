@@ -1,0 +1,317 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --font-heading: var(--font-geist-sans);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+:root {
+  --background: oklch(0.985 0.004 255);
+  --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.145 0 0);
+  --primary: oklch(0.424 0.199 265.638);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.97 0 0);
+  --secondary-foreground: oklch(0.205 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  --accent: oklch(0.97 0 0);
+  --accent-foreground: oklch(0.205 0 0);
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: oklch(0.922 0 0);
+  --input: oklch(0.922 0 0);
+  --ring: oklch(0.546 0.245 262.881);
+  --chart-1: oklch(0.424 0.199 265.638);
+  --chart-2: oklch(0.623 0.214 259.815);
+  --chart-3: oklch(0.769 0.188 70.08);
+  --chart-4: oklch(0.696 0.17 162.48);
+  --chart-5: oklch(0.637 0.237 25.331);
+  --radius: 0.75rem;
+  --sidebar: oklch(0.985 0 0);
+  --sidebar-foreground: oklch(0.145 0 0);
+  --sidebar-primary: oklch(0.205 0 0);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.97 0 0);
+  --sidebar-accent-foreground: oklch(0.205 0 0);
+  --sidebar-border: oklch(0.922 0 0);
+  --sidebar-ring: oklch(0.708 0 0);
+}
+
+.dark {
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.205 0 0);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.205 0 0);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.922 0 0);
+  --primary-foreground: oklch(0.205 0 0);
+  --secondary: oklch(0.269 0 0);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.269 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+  --accent: oklch(0.269 0 0);
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.556 0 0);
+  --chart-1: oklch(0.87 0 0);
+  --chart-2: oklch(0.556 0 0);
+  --chart-3: oklch(0.439 0 0);
+  --chart-4: oklch(0.371 0 0);
+  --chart-5: oklch(0.269 0 0);
+  --sidebar: oklch(0.205 0 0);
+  --sidebar-foreground: oklch(0.985 0 0);
+  --sidebar-primary: oklch(0.488 0.243 264.376);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.269 0 0);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.556 0 0);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  button:not(:disabled), [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+  html {
+    @apply font-sans;
+  }
+  /* Decorative, rotated or blurred elements must never make the page scroll sideways on phones. */
+  html,
+  body {
+    overflow-x: clip;
+  }
+
+  /*
+   * Scrollbars: a slim, rounded thumb that floats inside its container with no
+   * track, so it reads as part of the component. Inner scroll areas only show the
+   * thumb while hovered; the page scrollbar stays faintly visible.
+   */
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track,
+  ::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    border: 3px solid transparent;
+    border-radius: 9999px;
+    background-clip: padding-box;
+    background-color: transparent;
+  }
+  *:hover::-webkit-scrollbar-thumb {
+    background-color: rgb(100 116 139 / 0.28);
+  }
+  ::-webkit-scrollbar-thumb:hover,
+  ::-webkit-scrollbar-thumb:active {
+    background-color: rgb(30 64 175 / 0.45) !important;
+  }
+  html::-webkit-scrollbar-thumb {
+    background-color: rgb(100 116 139 / 0.22);
+  }
+  /* Firefox has no ::-webkit-scrollbar; use its thin, colour-only scrollbar instead. */
+  @supports not selector(::-webkit-scrollbar) {
+    * {
+      scrollbar-width: thin;
+      scrollbar-color: rgb(100 116 139 / 0.3) transparent;
+    }
+  }
+}
+
+/* ---------- Mutiara with you: custom utilities ---------- */
+/* Frosted panel over the map. A small blur radius keeps panning smooth: the
+   browser re-blurs everything under the panel on every frame the map moves. */
+@utility glass {
+  background-color: color-mix(in oklch, white 88%, transparent);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+/* Soft brand colour behind the top of each page; the frosted navbar picks it up. */
+.mu-aurora {
+  background:
+    radial-gradient(40rem 16rem at 18% 0, rgb(59 130 246 / 0.3), transparent 70%),
+    radial-gradient(36rem 15rem at 82% 0, rgb(14 165 233 / 0.28), transparent 70%),
+    radial-gradient(28rem 12rem at 50% 0, rgb(99 102 241 / 0.16), transparent 70%);
+}
+
+/* Keeps a scroll area's thumb off rounded corners. */
+@utility scroll-inset {
+  scrollbar-gutter: stable;
+  &::-webkit-scrollbar-track {
+    margin-block: 14px;
+  }
+}
+
+@utility no-scrollbar {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+@utility paper-lines {
+  background-image: repeating-linear-gradient(
+    to bottom,
+    transparent 0,
+    transparent 31px,
+    oklch(0.9 0.03 255) 31px,
+    oklch(0.9 0.03 255) 32px
+  );
+}
+
+@utility construction-stripes {
+  background-image: repeating-linear-gradient(
+    -45deg,
+    oklch(0.83 0.17 85) 0 14px,
+    oklch(0.25 0.02 260) 14px 28px
+  );
+}
+
+@keyframes caret-blink {
+  0%, 49% { opacity: 1; }
+  50%, 100% { opacity: 0; }
+}
+
+@keyframes pulse-ring {
+  0% { transform: scale(0.6); opacity: 0.7; }
+  100% { transform: scale(2.2); opacity: 0; }
+}
+
+/* A station node fills with blue when the line reaches it. */
+@keyframes node-fill {
+  0% { transform: scale(0); opacity: 0; }
+  60% { transform: scale(1.15); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+/* Password rule icon swap (cross ↔ tick). */
+@keyframes rule-pop {
+  0% { transform: scale(0.4) rotate(-90deg); opacity: 0; }
+  60% { transform: scale(1.18) rotate(8deg); opacity: 1; }
+  100% { transform: scale(1) rotate(0deg); opacity: 1; }
+}
+@keyframes rise-in {
+  from { opacity: 0; transform: translateY(10px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* Station map: the selected station pulses; a station fills blue once the train reaches it. */
+@keyframes station-ping {
+  0% { transform: scale(0.9); opacity: 0.85; }
+  80%, 100% { transform: scale(1.4); opacity: 0; }
+}
+.mu-station-ping { animation: station-ping 1.6s cubic-bezier(0, 0, 0.2, 1) infinite; }
+.mu-station-core { transition: background-color 0.3s, color 0.3s; }
+.mu-station[data-reached="true"] .mu-station-core {
+  background-color: #2563eb;
+  color: #fff;
+  animation: node-fill 0.42s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.mu-station[data-reached="true"][data-selected="true"] .mu-station-core { background-color: #1e3a8a; }
+
+.animate-caret { animation: caret-blink 1s step-end infinite; }
+.animate-rule-pop { animation: rule-pop 0.38s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+.animate-rise-in { animation: rise-in 0.4s cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+/*
+ * Page changes from the navbar: the old page fades out quickly and the new one
+ * rises in. The navbar has its own transition name so it stays put (its active
+ * pill keeps sliding live) instead of fading with the page.
+ */
+::view-transition { pointer-events: none; }
+::view-transition-old(.page-swap) { animation: 140ms ease-in both page-out; }
+::view-transition-new(.page-swap) { animation: 300ms cubic-bezier(0.22, 1, 0.36, 1) 60ms both page-in; }
+::view-transition-group(.page-swap) { animation-duration: 0s; }
+::view-transition-group(site-nav),
+::view-transition-group(site-tabs) { animation: none; z-index: 100; }
+::view-transition-old(site-nav),
+::view-transition-old(site-tabs) { display: none; }
+::view-transition-new(site-nav),
+::view-transition-new(site-tabs) { animation: none; }
+@keyframes page-out { to { opacity: 0; } }
+@keyframes page-in {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-rule-pop,
+  .animate-rise-in,
+  .mu-station-ping,
+  .mu-station[data-reached="true"] .mu-station-core { animation-duration: 1ms !important; animation-delay: 0ms !important; }
+  ::view-transition-old(*),
+  ::view-transition-new(*),
+  ::view-transition-group(*) { animation-duration: 0s !important; animation-delay: 0s !important; }
+}
+
+/* Leaflet custom pins */
+.mu-pin { background: transparent; border: none; }
+.mu-pin .pulse {
+  position: absolute; inset: 0; border-radius: 9999px;
+  animation: pulse-ring 1.8s ease-out infinite;
+}
+.leaflet-container { font-family: var(--font-geist-sans), sans-serif; z-index: 0; }
+.leaflet-control-zoom { border: none !important; box-shadow: 0 8px 24px rgb(0 0 0 / 0.12) !important; border-radius: 14px !important; overflow: hidden; }
+.leaflet-control-zoom a { width: 36px !important; height: 36px !important; line-height: 36px !important; }
+
+/* Phones: keep map controls clear of the bottom tab bar. */
+@media (max-width: 767.98px) {
+  .mu-map-full .leaflet-bottom { bottom: calc(4.75rem + env(safe-area-inset-bottom)); }
+}
+
