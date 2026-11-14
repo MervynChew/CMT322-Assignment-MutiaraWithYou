@@ -25,7 +25,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { cn } from "@/lib/utils";
 import { AREAS } from "@/lib/mock-data";
 import { formatDistance, haversine, segmentReach } from "@/lib/geo";
-import { CLOSURE_TYPES, type ClosureTypeId } from "@/lib/closure-type";
+import { CLOSURE_TYPES, syncClosure, type ClosureTypeId } from "@/lib/closure-type";
 import {
   compactPath,
   dominantRoad,
@@ -360,15 +360,24 @@ export function MapEditor() {
       lengthM: Math.round(drawing.legLengths.reduce((a, b) => a + b, 0)),
       modes: drawing.modes,
     };
-    setDraft({ ...draft, road: draft.road || segment.road, segments: [...(draft.segments ?? []), segment] });
+    // A full stretch closes the road all day, so it ends any daily hours (see syncClosure).
+    const endsHours = segment.kind === "full" && !!draft.dailyWindow;
+    changeDraft((d) => ({ ...d, road: d.road || segment.road, segments: [...(d.segments ?? []), segment] }));
     setDrawing(null);
     toast.success(`${segment.kind === "full" ? "Full" : "Partial"} block drawn on ${segment.road}`, {
-      description: `${formatDistance(segment.lengthM)} · blocks ${modesLabel(drawing.modes).toLowerCase()}. Save the roadblock to add it to the receipt.`,
+      description: endsHours
+        ? `${formatDistance(segment.lengthM)}. A full block closes the road all day, so this is now a full closure without daily hours.`
+        : `${formatDistance(segment.lengthM)} · blocks ${modesLabel(drawing.modes).toLowerCase()}. Save the roadblock to add it to the receipt.`,
     });
   }
 
+  /** Every change to the open roadblock's closure goes through here, so its type stays consistent (see syncClosure). */
+  function changeDraft(fn: (d: Roadblock) => Roadblock) {
+    setDraft((d) => d && syncClosure(d, fn(d)));
+  }
+
   function updateSegments(fn: (segs: ClosureSegment[]) => ClosureSegment[]) {
-    setDraft((d) => d && { ...d, segments: fn(d.segments ?? []) });
+    changeDraft((d) => ({ ...d, segments: fn(d.segments ?? []) }));
   }
 
   /* ---------- Rendering ---------- */
@@ -388,6 +397,7 @@ export function MapEditor() {
               setTool(active && t.id !== "select" ? "select" : t.id);
             }}
             aria-pressed={active}
+            aria-label={enlarged ? undefined : t.label}
             className={cn(
               "flex items-center gap-2.5 rounded-xl text-left text-sm transition",
               enlarged ? "w-full px-2 py-1.5" : "p-1",
@@ -677,10 +687,14 @@ export function MapEditor() {
               onModesChange={(modes) => setDraft((d) => d && { ...d, modes })}
               onSegmentModesChange={(id, modes) => updateSegments((segs) => segs.map((s) => (s.id === id ? { ...s, modes } : s)))}
               onRadiusChange={(radiusM) => setDraft((d) => d && { ...d, radiusM })}
-              onPatch={(patch) => setDraft((d) => d && { ...d, ...patch })}
-              onToggleSegmentKind={(id) =>
-                updateSegments((segs) => segs.map((s) => (s.id === id ? { ...s, kind: s.kind === "full" ? "partial" : "full" } : s)))
-              }
+              onPatch={(patch) => changeDraft((d) => ({ ...d, ...patch }))}
+              onToggleSegmentKind={(id) => {
+                const seg = draft.segments?.find((s) => s.id === id);
+                if (seg?.kind === "partial" && draft.dailyWindow) {
+                  toast("Now a full closure", { description: "A full block closes the road all day, so the daily hours were removed." });
+                }
+                updateSegments((segs) => segs.map((s) => (s.id === id ? { ...s, kind: s.kind === "full" ? "partial" : "full" } : s)));
+              }}
               onSave={(rb) => {
                 queueChange({ kind: isNew ? "add" : "edit", roadblock: rb });
                 toast.success(isNew ? `Added ${rb.road} to the receipt` : `Queued changes to ${rb.road}`);

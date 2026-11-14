@@ -324,7 +324,7 @@ function DeviceLocation() {
         ? error
         : known
           ? `${position.label}${position.accuracy ? ` · ±${Math.round(position.accuracy)} m` : ""}`
-          : "Not shared yet. Used for nearby alerts and the 1 km reporting rule.";
+          : "Not shared yet. Used for nearby alerts.";
 
   return (
     <Group title="Your location" description="Only used on this device to check what's near you.">

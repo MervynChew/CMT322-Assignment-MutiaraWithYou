@@ -396,7 +396,11 @@ export function RoadblockInspector({
               <ToggleGroupItem value="partial" className="flex-1 data-[state=on]:bg-amber-100 data-[state=on]:text-amber-900">Partial</ToggleGroupItem>
               <ToggleGroupItem value="full" className="flex-1 data-[state=on]:bg-red-100 data-[state=on]:text-red-800">Full</ToggleGroupItem>
             </ToggleGroup>
-            {derivedClosure && <p className="text-xs text-slate-400">Set by the drawn stretches: any full block makes it a full closure.</p>}
+            {derivedClosure ? (
+              <p className="text-xs text-slate-400">Set by the drawn stretches: any full block makes it a full closure.</p>
+            ) : (
+              form.dailyWindow && <p className="text-xs text-slate-400">Full closes the road all day, so it removes the daily hours.</p>
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-2">
@@ -412,14 +416,38 @@ export function RoadblockInspector({
 
           <div className="rounded-2xl bg-slate-50 p-3">
             <label className="flex items-center justify-between gap-3 text-xs font-medium">
-              Time-specific (daily window)
+              Time-specific (daily hours)
               <Switch checked={!!form.dailyWindow} onCheckedChange={(v) => onPatch({ dailyWindow: v ? { start: "08:00", end: "17:00" } : undefined })} />
             </label>
-            {form.dailyWindow && (
-              <div className="mt-2 grid grid-cols-2 gap-2">
-                <Input type="time" aria-label="Window start" value={form.dailyWindow.start} onChange={(e) => e.target.value && onPatch({ dailyWindow: { ...form.dailyWindow!, start: e.target.value } })} className="h-9 rounded-xl bg-white" />
-                <Input type="time" aria-label="Window end" value={form.dailyWindow.end} onChange={(e) => e.target.value && onPatch({ dailyWindow: { ...form.dailyWindow!, end: e.target.value } })} className="h-9 rounded-xl bg-white" />
-              </div>
+            {form.dailyWindow ? (
+              <>
+                <div className="mt-2 grid grid-cols-2 gap-2">
+                  <div className="grid gap-1">
+                    <Label htmlFor="ins-open" className="text-xs text-slate-500">Closes at</Label>
+                    <Input id="ins-open" type="time" value={form.dailyWindow.start} onChange={(e) => e.target.value && onPatch({ dailyWindow: { ...form.dailyWindow!, start: e.target.value } })} className="h-9 rounded-xl bg-white" />
+                  </div>
+                  <div className="grid gap-1">
+                    <Label htmlFor="ins-close" className="text-xs text-slate-500">Reopens at</Label>
+                    <Input id="ins-close" type="time" value={form.dailyWindow.end} onChange={(e) => e.target.value && onPatch({ dailyWindow: { ...form.dailyWindow!, end: e.target.value } })} className="h-9 rounded-xl bg-white" />
+                  </div>
+                </div>
+                {(type === "day" || type === "night") && (
+                  <p className="mt-2 flex items-start gap-2 text-xs leading-snug text-slate-600">
+                    <span aria-hidden className="mt-1 size-2 shrink-0 rounded-full" style={{ background: CLOSURE_TYPES[type].color }} />
+                    <span>
+                      Lanes close only during these hours, so this is{" "}
+                      <b className="font-semibold" style={{ color: CLOSURE_TYPES[type].color }}>{CLOSURE_TYPES[type].label.toLowerCase()}</b>.
+                      {" "}Closing in the evening (6 PM or later) or overnight counts as night works.
+                    </span>
+                  </p>
+                )}
+              </>
+            ) : (
+              <p className="mt-1 text-xs leading-snug text-slate-500">
+                {type === "full"
+                  ? "Closed all day. Turn this on to close lanes only during set hours; it then becomes daytime or night works."
+                  : "Turn this on to close lanes only during set hours (daytime or night works)."}
+              </p>
             )}
           </div>
 

@@ -93,11 +93,13 @@ export function ReportSheet({
               {roadblock?.road ?? "Removed roadblock"}
               {area && <span className="ml-2 text-sm text-slate-500 not-italic">({area.name})</span>}
             </Filled>
-            <p className="mt-2 flex flex-wrap items-center gap-1.5 rounded-xl bg-emerald-50 px-3 py-2 text-xs text-emerald-800">
-              <LocateFixed className="size-3.5" />
-              {entry.distanceM !== undefined ? `Filed ${formatDistance(entry.distanceM)} from the site` : "Filed within 1 km of the site"}
-              {entry.positionLabel && <span className="text-emerald-700/70">· {entry.positionLabel}</span>}
-            </p>
+            {entry.distanceM !== undefined && (
+              <p className="mt-2 flex flex-wrap items-center gap-1.5 rounded-xl bg-emerald-50 px-3 py-2 text-xs text-emerald-800">
+                <LocateFixed className="size-3.5" />
+                Filed {formatDistance(entry.distanceM)} from the site
+                {entry.positionLabel && <span className="text-emerald-700/70">· {entry.positionLabel}</span>}
+              </p>
+            )}
           </div>
 
           <div className="grid gap-6 sm:grid-cols-2">

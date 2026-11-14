@@ -83,7 +83,6 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
   );
 }
 
-/** Page title card: a contained blue hero, so the page never splits into a blue half and a white half. */
 /** Small count capsule for an AdminPageHeader, e.g. "16 reports" or "3 urgent". */
 export function HeaderStat({
   icon: Icon,
@@ -108,34 +107,20 @@ export function HeaderStat({
   );
 }
 
-/** Capsules on one row with short tips underneath: the standard description for console pages. */
-export function HeaderSummary({ stats, tips }: { stats: React.ReactNode; tips?: { icon: typeof ShieldCheck; text: string }[] }) {
-  return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap gap-2">{stats}</div>
-      {tips && tips.length > 0 && (
-        <ul className="space-y-1">
-          {tips.map(({ icon: Icon, text }) => (
-            <li key={text} className="flex items-center gap-2">
-              <Icon className="size-3.5 shrink-0 text-blue-200" /> {text}
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  );
-}
-
+/** Page title card: a contained blue hero, so the page never splits into a blue half and a white half. */
 export function AdminPageHeader({
   eyebrow,
   title,
   description,
+  stats,
   actions,
   className,
 }: {
   eyebrow: string;
   title: string;
   description?: React.ReactNode;
+  /** HeaderStat capsules, shown on the right with the actions. */
+  stats?: React.ReactNode;
   actions?: React.ReactNode;
   className?: string;
 }) {
@@ -168,7 +153,12 @@ export function AdminPageHeader({
           <h1 className="mt-1 text-3xl font-bold tracking-tight sm:text-4xl">{title}</h1>
           {description && <div className="mt-2 max-w-2xl text-sm text-blue-100/90">{description}</div>}
         </div>
-        {actions && <div className="flex flex-wrap gap-2">{actions}</div>}
+        {(stats || actions) && (
+          <div className="flex flex-wrap items-center gap-2 text-sm">
+            {stats}
+            {actions}
+          </div>
+        )}
       </div>
     </div>
   );

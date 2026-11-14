@@ -33,6 +33,31 @@ export function effectiveClosure(rb: Pick<Roadblock, "closure" | "segments">) {
   return rb.segments.some((s) => s.kind === "full") ? "full" : "partial";
 }
 
+type ClosureFields = Pick<Roadblock, "closure" | "segments" | "dailyWindow">;
+
+const sameWindow = (a?: DailyWindow, b?: DailyWindow) => a?.start === b?.start && a?.end === b?.end;
+
+/**
+ * Keeps a roadblock's extent, drawn stretches and daily hours agreeing with
+ * each other, so its type always matches what the admin changed last:
+ * - Daily hours mean lanes close only during those hours: daytime or night
+ *   works, decided by the opening time. Adding or changing the hours turns a
+ *   full closure (and any full stretches) into a partial one.
+ * - A full closure is closed all day, so making it full (the extent, or a
+ *   full stretch) removes the daily hours.
+ */
+export function syncClosure<T extends ClosureFields>(prev: ClosureFields, next: T): T {
+  if (!next.dailyWindow || effectiveClosure(next) !== "full") return next;
+  if (!sameWindow(prev.dailyWindow, next.dailyWindow)) {
+    return {
+      ...next,
+      closure: "partial",
+      segments: next.segments?.map((s) => (s.kind === "full" ? { ...s, kind: "partial" as const } : s)),
+    } as T;
+  }
+  return { ...next, dailyWindow: undefined } as T;
+}
+
 /** Which of the five closure types a roadblock is. */
 export function closureTypeOf(rb: Pick<Roadblock, "status" | "closure" | "segments" | "dailyWindow">): ClosureTypeId {
   if (rb.status === "scheduled") return "scheduled";

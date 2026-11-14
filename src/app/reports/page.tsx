@@ -11,7 +11,7 @@ export default function ReportsPage() {
         <p className="text-xs font-semibold tracking-widest text-blue-700 uppercase">Citizen reports</p>
         <h1 className="text-3xl font-bold tracking-tight">Help keep closure data accurate</h1>
         <p className="mx-auto mt-2 max-w-lg text-sm text-slate-500">
-          File a report when a closure on the map doesn&apos;t match what you see on the road. You must be within 1 km of the site.
+          File a report when a closure on the map doesn&apos;t match what you see on the road.
         </p>
       </div>
       <Suspense>

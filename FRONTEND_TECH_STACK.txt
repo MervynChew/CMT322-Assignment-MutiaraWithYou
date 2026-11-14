@@ -1,0 +1,482 @@
+===============================================================================
+  MUTIARA WITH YOU - FRONTEND TECH STACK
+  Penang LRT (Mutiara Line) Construction & Roadblock Tracker
+===============================================================================
+
+Versions listed are the ones installed in node_modules (from bun.lock), not
+just the ranges in package.json.
+
+The project is a frontend-only web app. There is no backend server or
+database: all data (users, roadblocks, reports, announcements) is mock data
+held in the browser by Zustand and saved to localStorage. The only network
+calls go to free public map services (see section 9).
+
+
+-------------------------------------------------------------------------------
+ OVERVIEW (layer by layer)
+-------------------------------------------------------------------------------
+
+  Layer                 Technology                         Version
+  --------------------  ---------------------------------  ----------
+  Package manager       Bun                                1.4.4
+  JS runtime (server)   Node.js                            20.16.0
+  Framework             Next.js (App Router, Turbopack)    16.4.3
+  UI library            React + React DOM                  19.3.0
+  Language              TypeScript (strict)                5.9.3
+  Styling               Tailwind CSS                       4.3.3
+  Component system      shadcn/ui (Radix UI primitives)    4.23.0 / 1.8.1
+  Icons                 Lucide React                       1.64.0
+  State management      Zustand (+ persist middleware)     5.0.16
+  Forms + validation    React Hook Form + Zod              7.91.0 / 4.6.7
+  Maps                  Leaflet + React Leaflet            1.9.4 / 5.0.0
+  Map data              OpenStreetMap, OSRM, Nominatim     (web services)
+  Notifications         Sonner (toasts)                    2.0.8
+  PDF generation        jsPDF                              4.2.1
+  Linting               ESLint (flat config)               9.39.5
+  Fonts                 Geist Sans / Geist Mono            (next/font)
+
+
+-------------------------------------------------------------------------------
+ 1. RUNTIME & PACKAGE MANAGER
+-------------------------------------------------------------------------------
+
+BUN 1.4.4
+  - Installs packages and runs scripts. Pinned in package.json:
+    "packageManager": "bun@1.4.4". The lockfile is bun.lock.
+  - Commands:
+        bun install          install dependencies
+        bun add <pkg>        add a dependency
+        bun run dev          start the dev server  (next dev)
+        bun run build        production build      (next build)
+        bun run start        serve the production build (next start)
+        bun run lint         run ESLint
+        bunx tsc --noEmit    type-check the whole project
+  - "trustedDependencies" lists sharp (Next.js image optimisation) and
+    unrs-resolver (used by the ESLint import resolver). These are the only
+    packages allowed to run install scripts.
+
+NODE.JS 20.16.0
+  - `bun run dev` starts the Next.js CLI, and the Next.js server itself runs
+    on Node.js. Bun manages packages and scripts; Node runs Next.js.
+  - @types/node 20.19.43 provides the Node type definitions.
+
+
+-------------------------------------------------------------------------------
+ 2. FRAMEWORK - NEXT.JS 16.4.3
+-------------------------------------------------------------------------------
+
+Routing: App Router (src/app/)
+  - File-based routes:
+        /                       Home dashboard (public)
+        /map                    Live map, place search, route checker
+        /reports                Submit a report / report history
+        /profile                User profile and notification settings
+        /sign-in, /sign-up      Auth pages, in the (auth) route group
+        /admin                  Admin dashboard (KPIs, charts)
+        /admin/post             Map editor: place and draw roadblocks, post
+        /admin/reports          Review public reports
+        /admin/announcements    Manage announcements
+        /admin/profile          Admin profile
+  - Route group "(auth)" shares one layout for sign-in and sign-up without
+    adding "/auth" to the URL.
+  - Nested layout: src/app/admin/layout.tsx wraps every admin page.
+  - template.tsx wraps each page in a React <ViewTransition> so moving
+    between pages animates instead of blinking.
+  - Static metadata: `export const metadata` sets page titles and
+    descriptions (12 files).
+
+Bundler: Turbopack (the default for both dev and build in Next 16)
+  - next.config.ts adds a Turbopack rule that runs every *.css file through
+    @tailwindcss/turbopack 4.3.3. There is no PostCSS config.
+  - The dev build goes to .next/dev, so `next build` can run while the dev
+    server is still running.
+
+Rendering features (next.config.ts)
+  - cacheComponents: true
+      Enables Cache Components. Pages you have visited stay mounted in the
+      background (React <Activity>), so going back to a page is instant and
+      keeps its state.
+  - partialPrefetching: true
+      Prefetches linked routes partially.
+  - Server Components are the default. 'use client' is added only where a
+    component needs hooks, Leaflet or browser APIs.
+  - <Suspense> boundaries wrap components that read the URL with
+    useSearchParams (required for static rendering).
+
+Built-in modules used
+  - next/link          Client-side navigation (14 files). Uses
+                       transitionTypes={["nav"]} to trigger page transitions.
+  - next/navigation    useRouter, usePathname, useSearchParams. Deep links
+                       use URL parameters, e.g. /map?area=..., /map?mode=route,
+                       /reports?tab=new&roadblock=...&at=...
+  - next/dynamic       Loads the Leaflet maps with { ssr: false }, because
+                       Leaflet needs `window` (map-explorer.tsx,
+                       map-editor.tsx).
+  - next/image         Optimised local images (logo, auth page art).
+  - next/font/google   Self-hosts the Geist and Geist Mono fonts at build time
+                       (CSS variables --font-geist-sans and --font-geist-mono).
+
+
+-------------------------------------------------------------------------------
+ 3. UI LIBRARY - REACT 19.3.0 / REACT DOM 19.3.0
+-------------------------------------------------------------------------------
+
+  - React Server Components plus Client Components.
+  - <ViewTransition>    Animated page changes. The navbar and the mobile tab
+                        bar have their own view-transition names, so they stay
+                        still while the page content animates.
+  - <Activity>          Used by Next.js Cache Components to keep pages alive.
+  - <Suspense>          Loading boundaries for URL-dependent components.
+  - Hooks used:
+        useState, useEffect, useLayoutEffect, useMemo, useCallback, useRef,
+        useReducer, useId, useSyncExternalStore
+  - useSyncExternalStore drives three things in a hydration-safe way:
+        use-mounted.ts   whether the app is running in the browser
+        use-now.ts       a shared ticking clock for countdowns
+        navbar.tsx       whether the page has scrolled
+  - Custom hooks (src/hooks/):
+        use-device-location.ts   device GPS position with permission and
+                                 error states
+        use-mounted.ts           client-only rendering guard
+        use-now.ts               shared live clock
+        use-stable-callback.ts   stable function reference for callbacks
+  - @types/react 19.3.0 and @types/react-dom provide the type definitions.
+
+
+-------------------------------------------------------------------------------
+ 4. LANGUAGE - TYPESCRIPT 5.9.3
+-------------------------------------------------------------------------------
+
+  - "strict": true. Type-checking only ("noEmit": true); Next/Turbopack does
+    the compiling.
+  - moduleResolution "bundler", module "esnext", target ES2017, jsx
+    "react-jsx".
+  - Path alias: "@/*" -> "./src/*"   (e.g. import { cn } from "@/lib/utils")
+  - Next.js TypeScript plugin enabled.
+  - Shared domain types live in src/lib/types.ts (Roadblock, ClosureSegment,
+    Report, Announcement, User, Station, LatLng, ...).
+
+
+-------------------------------------------------------------------------------
+ 5. STYLING
+-------------------------------------------------------------------------------
+
+TAILWIND CSS 4.3.3
+  - CSS-first configuration: no tailwind.config.js. The theme is defined in
+    src/app/globals.css with `@import "tailwindcss"` and `@theme inline { ... }`,
+    which maps CSS variables to Tailwind tokens (colours, radius, fonts).
+  - @custom-variant dark is defined. The app currently runs in light mode.
+  - Container queries (@container, cqw units) size the station network
+    diagram so labels fit at any width.
+  - Responsive breakpoints sm / md / lg, plus a separate mobile tab bar.
+
+tw-animate-css 1.4.0
+  - Enter and exit animation utilities (animate-in, fade-in, zoom-in,
+    slide-in-from-*) used by dialogs, popovers, menus and tooltips.
+
+shadcn/tailwind.css
+  - Base CSS that ships with the shadcn package, imported in globals.css.
+
+Custom CSS (globals.css)
+  - .mu-aurora soft animated background, glass navbar, view-transition
+    keyframes, construction-stripe fallback, station-line styles.
+  - Animations respect prefers-reduced-motion.
+
+Colour system
+  - Primary: Mutiara Transit Blue  #1E40AF (blue-800), blue-600, blue-50.
+  - Closure-type colours (src/lib/closure-type.ts):
+        Full closure      #dc2626  (red)
+        Partial closure   #f59e0b  (amber)
+        Daytime only      #f97316  (orange)
+        Night only        #4f46e5  (indigo)
+        Scheduled         #64748b  (slate)
+  - Charts use a single-hue sequential blue ramp, pale to dark (BLUE_RAMP in
+    mini-charts.tsx).
+
+Fonts
+  - Geist Sans (body and headings) and Geist Mono (codes and IDs), via
+    next/font.
+
+
+-------------------------------------------------------------------------------
+ 6. COMPONENT SYSTEM - SHADCN/UI + RADIX UI
+-------------------------------------------------------------------------------
+
+shadcn 4.23.0 (CLI and registry)
+  - Copies component source code into src/components/ui/, so the components
+    are owned and editable, not hidden inside a package.
+  - components.json: style "radix-nova", base colour neutral, CSS variables
+    on, RSC on, icon library lucide, aliases @/components, @/lib, @/hooks.
+  - Primitives in src/components/ui/:
+        alert, avatar, badge, button, calendar, card, checkbox, dialog,
+        dropdown-menu, field, input, label, popover, progress, scroll-area,
+        select, separator, sheet, skeleton, sonner, switch, table, tabs,
+        textarea, toggle, toggle-group, tooltip
+    (calendar, sheet, scroll-area and progress are installed but no page
+    uses them yet.)
+
+radix-ui 1.8.1 (the unified Radix package)
+  - Unstyled, accessible primitives behind the shadcn components: Dialog,
+    Popover, Select, Tabs, ToggleGroup, Switch, Checkbox, Tooltip,
+    DropdownMenu, Avatar, Separator, Label and Slot (the asChild pattern).
+  - Provides keyboard navigation, focus trapping and ARIA roles.
+
+class-variance-authority 0.7.1
+  - Typed style variants (variant / size) for Button, Badge, Toggle and
+    others.
+
+cn 0.5.0
+  - Fast class-name joiner and Tailwind conflict resolver. It is a drop-in
+    replacement for clsx + tailwind-merge (tailwind-merge is not installed).
+    Re-exported from src/lib/utils.ts as `cn(...)`.
+
+lucide-react 1.64.0
+  - All icons (MapPin, Route, Megaphone, HardHat, ...).
+
+sonner 2.0.8
+  - Toast notifications (16 files): bottom-centre, rich colours, and action
+    buttons such as "Undo" or "Make it 300 m".
+  - Wrapped by src/components/ui/sonner.tsx and mounted in
+    src/components/layout/providers.tsx.
+
+Supporting packages (pulled in by shadcn components)
+  - next-themes 0.4.6       read only by the shadcn Sonner wrapper; the app
+                            passes theme="light".
+  - react-day-picker 10.0.2 date-picker engine behind ui/calendar.tsx.
+  - date-fns 4.4.0          date maths used by react-day-picker. The app's
+                            own date formatting uses the built-in Intl API
+                            (section 10).
+
+
+-------------------------------------------------------------------------------
+ 7. STATE MANAGEMENT - ZUSTAND 5.0.16
+-------------------------------------------------------------------------------
+
+  - One global store: src/store/useStore.ts.
+  - It acts as the app's client-side "database" and session:
+        - signed-in user and role (public / admin)
+        - users and notification settings (email, WhatsApp, SMS, smart
+          location)
+        - roadblocks with closure segments, radius and travel modes
+        - public reports and their review history
+        - announcements and the admin's queue of pending changes
+          (draft -> receipt -> post)
+  - persist middleware (zustand/middleware):
+        storage    createJSONStorage(() => localStorage)
+        key        "mutiara-with-you", schema version 2
+        skipHydration, with a manual rehydrate() after mount in
+        ClientBootstrap (providers.tsx), so the server HTML and the first
+        browser render always match
+        custom merge that fills in settings missing from older saved data
+  - rebaseSeed() shifts the mock dates so the data is always relative to
+    today.
+  - Selector hooks: useCurrentUser(), useSessionUserId(), and
+    useStore(selector).
+  - Seed data: src/lib/mock-data.ts and src/lib/seed-segments.ts (areas,
+    places, 22 LRT stations, LRT routes, roadblocks, reports, users).
+
+
+-------------------------------------------------------------------------------
+ 8. FORMS & VALIDATION
+-------------------------------------------------------------------------------
+
+  - react-hook-form 7.91.0   form state with useForm, Controller and
+                             useWatch (public report form).
+  - zod 4.6.7                schema validation of report fields.
+  - @hookform/resolvers 6.0.2  zodResolver connects the Zod schema to
+                               React Hook Form.
+  - Other forms (sign-in, sign-up, announcements, profile) use controlled
+    React state with shadcn Field, Input, Textarea, Select and Switch
+    components.
+  - File inputs: report photos (image/*) and announcement PDFs, previewed
+    locally with URL.createObjectURL. Nothing is uploaded.
+
+
+-------------------------------------------------------------------------------
+ 9. MAPS & GEOSPATIAL
+-------------------------------------------------------------------------------
+
+leaflet 1.9.4
+  - Map engine. Uses preferCanvas for fast drawing of many lines and circles.
+  - leaflet/dist/leaflet.css is imported in stable-map.tsx.
+  - @types/leaflet 1.9.22 provides the type definitions.
+
+react-leaflet 5.0.0 and @react-leaflet/core 3.0.0
+  - React components for map layers: TileLayer, Marker, Polyline, Circle,
+    Tooltip and others.
+  - stable-map.tsx is a custom map container built on @react-leaflet/core
+    (createLeafletContext). It is safe under React Strict Mode and kept-alive
+    pages.
+  - Always loaded with next/dynamic { ssr: false }.
+
+Map modules (src/components/modules/map/ and gov/)
+  - live-map.tsx         public map: roadblock pins, closure lines, search
+                         radius circle, route lines.
+  - editor-map.tsx       admin map: place pins, draw closure stretches on
+                         roads, drag to move.
+  - base-layers.tsx      OSM tiles, the two Mutiara Line LRT routes, station
+                         markers with tooltips, camera control (fit to
+                         bounds with padding).
+  - pins.ts              custom DivIcon pins (traffic-cone style, coloured by
+                         closure type, with sun/moon/calendar badges) and an
+                         icon cache.
+  - segment-lines.tsx    road closure stretches drawn as polylines.
+  - leaflet-fixes.ts     patch for a Leaflet 1.9 tooltip bug ("Cannot set
+                         properties of null (setting '_source')").
+
+External map services (free, no API key)
+  - OpenStreetMap tiles       https://tile.openstreetmap.org/{z}/{x}/{y}.png
+                              Base map, with © OpenStreetMap attribution.
+  - OSRM routing              https://router.project-osrm.org
+                              fallback: https://routing.openstreetmap.de/routed-car
+                              The "nearest" and "route" services snap the
+                              admin's drawing to real roads (src/lib/road-snap.ts).
+                              7-second timeout per server, with fallback to
+                              the next server.
+  - Nominatim (OSM)           https://nominatim.openstreetmap.org/reverse
+                              Turns the device's GPS position into a street or
+                              area name (src/lib/locate.ts).
+
+In-house geometry (src/lib/geo.ts; no Turf.js)
+  - haversine distance, distance to a polyline, circle bounds, segment reach,
+    route-versus-roadblock hit tests, the route suggestions shown by the
+    route checker, and distance formatting.
+  - src/lib/closure-type.ts works out a closure's type (full, partial, day,
+    night, scheduled), including daily time windows.
+
+
+-------------------------------------------------------------------------------
+ 10. OTHER LIBRARIES & BROWSER APIS
+-------------------------------------------------------------------------------
+
+jspdf 4.2.1
+  - Generates downloadable report PDFs (src/lib/report-pdf.ts).
+  - Loaded only when needed, with `await import("jspdf")`, so it is not in
+    the main bundle.
+
+Dates and times: built-in Intl API
+  - Intl.DateTimeFormat with locale "en-MY" and time zone "Asia/Kuala_Lumpur"
+    (src/lib/time.ts). The fixed locale and time zone make the server and the
+    browser print the same text, which avoids hydration errors.
+
+Images
+  - Construction photos from images.unsplash.com, shown with <img
+    loading="lazy"> and a striped fallback if a photo fails (site-image.tsx).
+  - Local assets in public/: logo/logo.png and sample PDFs in docs/.
+
+Browser APIs used directly
+  - Geolocation API        real device location for reports and "near me".
+  - localStorage           persisted store (through Zustand).
+  - fetch + AbortSignal.timeout   calls to OSRM and Nominatim.
+  - View Transitions API   page transitions (through React <ViewTransition>).
+  - ResizeObserver         positions the sliding navbar highlight.
+  - MutationObserver       an inline <head> script removes attributes that
+                           browser extensions inject (e.g. fdprocessedid),
+                           so they don't cause hydration errors.
+  - requestAnimationFrame  animated train on the station line, turned off
+                           when the user prefers reduced motion.
+  - matchMedia             detects prefers-reduced-motion.
+  - File API / URL.createObjectURL   local previews of photos and PDFs.
+
+
+-------------------------------------------------------------------------------
+ 11. CODE QUALITY & TOOLING
+-------------------------------------------------------------------------------
+
+  - ESLint 9.39.5, flat config (eslint.config.mjs).
+  - eslint-config-next 16.4.3, with the presets:
+        core-web-vitals   Next.js and performance rules
+        typescript        TypeScript rules
+  - eslint-plugin-react-hooks 7.1.1 (included by eslint-config-next)
+        Rules of Hooks plus the newer React Compiler-based checks, e.g.
+        purity (no Date.now() during render) and set-state-in-effect.
+        The React Compiler itself is not enabled for building.
+  - TypeScript type check: `bunx tsc --noEmit`.
+  - Production build check: `bun run build` (Turbopack, 14 static routes).
+  - No unit-test framework (Jest, Vitest or Playwright) is set up in the
+    repo.
+
+
+-------------------------------------------------------------------------------
+ 12. PROJECT STRUCTURE
+-------------------------------------------------------------------------------
+
+  src/
+    app/                     Next.js App Router pages, layouts, template,
+                             globals.css
+      (auth)/                sign-in, sign-up (shared layout)
+      admin/                 dashboard, post, reports, announcements, profile
+      map/  reports/  profile/
+    components/
+      ui/                    shadcn/ui primitives (owned source code)
+      layout/                navbar, mobile tab bar, announcements menu,
+                             providers
+      shared/                cross-module pieces: status badges, travel
+                             modes, dialogs, auth gate, countdown, report
+                             paper
+      modules/
+        auth/                sign-in and sign-up forms, password fields
+        dashboard/           hero, station network line, roadblock feed,
+                             subscriptions
+        map/                 public map, search and route, roadblock panel,
+                             Leaflet layers
+        gov/                 admin: map editor, inspector, audit receipt,
+                             announcement queue, report review, KPI cards,
+                             charts
+        user/                report form, report history, profile
+    hooks/                   custom React hooks
+    lib/                     types, mock data, geo maths, road snapping,
+                             time formatting, closure types, PDF export,
+                             utils
+    store/                   Zustand store (useStore.ts)
+  public/                    logo, sample PDFs, SVG icons
+
+Conventions
+  - Server Components by default; 'use client' only for hooks, Leaflet or
+    browser APIs.
+  - Every Leaflet component is loaded with next/dynamic { ssr: false }.
+  - Mutiara Transit Blue theme (#1E40AF) throughout.
+  - Accessible first: Radix primitives, keyboard-operable comboboxes, ARIA
+    labels, visible focus rings, reduced-motion support, large touch
+    targets.
+
+
+-------------------------------------------------------------------------------
+ 13. DEPENDENCY LIST (package.json)
+-------------------------------------------------------------------------------
+
+dependencies
+  @hookform/resolvers        ^6.0.2    (installed 6.0.2)
+  @react-leaflet/core        ^3.0.0    (installed 3.0.0)
+  class-variance-authority   ^0.7.1    (installed 0.7.1)
+  cn                         ^0.5.0    (installed 0.5.0)
+  date-fns                   ^4.4.0    (installed 4.4.0)
+  jspdf                      ^4.2.1    (installed 4.2.1)
+  leaflet                    ^1.9.4    (installed 1.9.4)
+  lucide-react               ^1.64.0   (installed 1.64.0)
+  next                       16.4.3    (installed 16.4.3)
+  next-themes                ^0.4.6    (installed 0.4.6)
+  radix-ui                   ^1.8.1    (installed 1.8.1)
+  react                      19.3.0    (installed 19.3.0)
+  react-day-picker           ^10.0.2   (installed 10.0.2)
+  react-dom                  19.3.0    (installed 19.3.0)
+  react-hook-form            ^7.91.0   (installed 7.91.0)
+  react-leaflet              ^5.0.0    (installed 5.0.0)
+  shadcn                     ^4.23.0   (installed 4.23.0)
+  sonner                     ^2.0.8    (installed 2.0.8)
+  tw-animate-css             ^1.4.0    (installed 1.4.0)
+  zod                        ^4.6.7    (installed 4.6.7)
+  zustand                    ^5.0.16   (installed 5.0.16)
+
+devDependencies
+  @tailwindcss/turbopack     ^4        (installed 4.3.3)
+  @types/leaflet             ^1.9.22   (installed 1.9.22)
+  @types/node                ^20       (installed 20.19.43)
+  @types/react               ^19       (installed 19.3.0)
+  @types/react-dom           ^19       (installed 19.3.0)
+  eslint                     ^9        (installed 9.39.5)
+  eslint-config-next         16.4.3    (installed 16.4.3)
+  tailwindcss                ^4        (installed 4.3.3)
+  typescript                 ^5        (installed 5.9.3)
+
+===============================================================================

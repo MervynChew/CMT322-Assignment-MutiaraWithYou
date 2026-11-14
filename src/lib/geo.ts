@@ -49,9 +49,6 @@ export function formatDistance(m: number): string {
   return m < 1000 ? `${Math.round(m)} m` : `${(m / 1000).toFixed(1)} km`;
 }
 
-/** Reporting rule: users must be within this distance of the roadblock pin. */
-export const REPORT_RADIUS_M = 1000;
-
 export type RouteSuggestion = {
   id: string;
   label: string;

@@ -26,16 +26,29 @@ export const metadata: Metadata = {
  * Some browsers and extensions (Edge form autofill, password managers,
  * Bitdefender…) stamp attributes such as `fdprocessedid` onto buttons and
  * inputs before React loads, which React reports as a hydration mismatch.
- * This runs first and removes them as they appear, until the page has loaded.
+ * This runs first and removes them as they appear.
+ *
+ * It keeps watching for the life of the page rather than stopping after load:
+ * a tab that sleeps in the background can hydrate much later (Edge stamps the
+ * fields as the tab wakes), and Suspense / preserved pages hydrate on their own
+ * schedule. Each element is cleaned at most a few times, so it can never get
+ * into a tug-of-war with an extension that re-adds the attribute.
+ *
+ * Development only: production React does not compare attributes on hydration.
  */
 const STRIP_EXTENSION_ATTRIBUTES = `(() => {
   try {
     const names = ["fdprocessedid", "bis_skin_checked", "bis_size", "bis_id"];
-    const observer = new MutationObserver((records) => {
-      for (const r of records) if (r.attributeName) r.target.removeAttribute(r.attributeName);
-    });
-    observer.observe(document.documentElement, { subtree: true, attributes: true, attributeFilter: names });
-    addEventListener("load", () => setTimeout(() => observer.disconnect(), 5000));
+    const cleaned = new WeakMap();
+    new MutationObserver((records) => {
+      for (const { target, attributeName } of records) {
+        if (!attributeName || !target.hasAttribute(attributeName)) continue;
+        const times = (cleaned.get(target) || 0) + 1;
+        if (times > 8) continue;
+        cleaned.set(target, times);
+        target.removeAttribute(attributeName);
+      }
+    }).observe(document.documentElement, { subtree: true, attributes: true, attributeFilter: names });
   } catch {}
 })();`;
 
@@ -48,7 +61,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <head>
-        <script dangerouslySetInnerHTML={{ __html: STRIP_EXTENSION_ATTRIBUTES }} />
+        {process.env.NODE_ENV === "development" && <script dangerouslySetInnerHTML={{ __html: STRIP_EXTENSION_ATTRIBUTES }} />}
       </head>
       <body suppressHydrationWarning className="min-h-full bg-slate-50 text-slate-900">
         <Providers>

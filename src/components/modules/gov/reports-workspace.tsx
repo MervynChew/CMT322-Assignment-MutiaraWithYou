@@ -2,9 +2,9 @@
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
-import { FileDown, FileText, Hourglass, MousePointerClick, Star } from "lucide-react";
+import { FileText, Hourglass, Star } from "lucide-react";
 import { useStore } from "@/store/useStore";
-import { AdminPageHeader, HeaderStat, HeaderSummary } from "./admin-shell";
+import { AdminPageHeader, HeaderStat } from "./admin-shell";
 import { ReportReviewDetail } from "./report-review-detail";
 import { ReportReviewTable } from "./report-review-table";
 
@@ -35,7 +35,7 @@ export function ReportsWorkspace() {
   if (ticket) {
     return (
       <>
-        <AdminPageHeader eyebrow="Report review" title={`Report ${ticket}`} description="Summary on the left; the form exactly as the citizen submitted it on the right." />
+        <AdminPageHeader eyebrow="Reports" title={`Report ${ticket}`} description="The summary, and the form as it was sent." />
         <ReportReviewDetail reportId={ticket} orderedIds={orderedIds} onOpen={open} onBack={() => router.push(pathname)} />
       </>
     );
@@ -44,22 +44,15 @@ export function ReportsWorkspace() {
   return (
     <>
       <AdminPageHeader
-        eyebrow="Report review"
+        eyebrow="Reports"
         title="Citizen reports"
-        description={
-          <HeaderSummary
-            stats={
-              <>
-                <HeaderStat icon={FileText} value={reports.length} label="reports" />
-                <HeaderStat icon={Hourglass} value={pending} label="pending review" tone="bg-amber-400 text-amber-950" />
-                <HeaderStat icon={Star} value={focused} label="in focus" tone="bg-amber-200 text-amber-900" />
-              </>
-            }
-            tips={[
-              { icon: MousePointerClick, text: "Open a report to see the form exactly as it was submitted." },
-              { icon: FileDown, text: "Tick several reports to export them together as one PDF." },
-            ]}
-          />
+        description="Roadblock issues sent in by the public."
+        stats={
+          <>
+            <HeaderStat icon={FileText} value={reports.length} label="reports" />
+            <HeaderStat icon={Hourglass} value={pending} label="pending review" tone="bg-amber-400 text-amber-950" />
+            <HeaderStat icon={Star} value={focused} label="in focus" tone="bg-amber-200 text-amber-900" />
+          </>
         }
       />
       <ReportReviewTable onOpen={open} />

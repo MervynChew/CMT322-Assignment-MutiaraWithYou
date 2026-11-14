@@ -5,7 +5,7 @@ import { Controller, useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
-import { Crosshair, History, LoaderCircle, LocateFixed, MapPinned, MapPinOff, Send, Stamp, X } from "lucide-react";
+import { History, MapPinned, Send, Stamp, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -22,10 +22,8 @@ import {
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { AREAS, REPORT_CATEGORIES } from "@/lib/mock-data";
-import { formatDistance, haversine, REPORT_RADIUS_M } from "@/lib/geo";
 import { formatDateTime } from "@/lib/time";
 import type { ReportCategory } from "@/lib/types";
-import { useDeviceLocation } from "@/hooks/use-device-location";
 import { useCurrentUser, useSessionUserId, useStore } from "@/store/useStore";
 import { ImageDropzone, type UploadedImage } from "./image-dropzone";
 
@@ -77,7 +75,6 @@ export function ReportForm({
   const initialRoadblockId = prefill?.roadblockId;
   const roadblocks = useStore((s) => s.roadblocks);
   const reports = useStore((s) => s.reports);
-  const { position, status: locStatus, error: locError, locate } = useDeviceLocation();
   const createReport = useStore((s) => s.createReport);
   const appendToReport = useStore((s) => s.appendToReport);
   const user = useCurrentUser();
@@ -114,11 +111,6 @@ export function ReportForm({
   }, [prefillKey]);
 
   const roadblockId = useWatch({ control: form.control, name: "roadblockId" });
-  const roadblock = roadblocks.find((r) => r.id === roadblockId);
-  const distance = roadblock && position ? haversine(position, roadblock) : null;
-  const outOfRange = distance !== null && distance > REPORT_RADIUS_M;
-  /** Reports need a real location within 1 km of the site. */
-  const blocked = !position || outOfRange;
 
   /** Rule: one active report per roadblock — while it is pending review, new details are added to it as an update. */
   const openReport = useMemo(
@@ -127,10 +119,6 @@ export function ReportForm({
   );
 
   function onSubmit(values: FormValues) {
-    if (blocked || !position) {
-      if (!position) toast.error("Share your location first", { description: "Reports can only be sent from within 1 km of the roadblock." });
-      return;
-    }
     const entry = {
       note: values.description,
       category: values.category as ReportCategory,
@@ -138,8 +126,6 @@ export function ReportForm({
       images: images.map((i) => i.name),
       // Kept (not revoked) so admins can see the photos when reviewing this session.
       imageUrls: images.map((i) => i.url),
-      distanceM: distance ?? undefined,
-      positionLabel: position.label,
     };
     if (openReport) {
       appendToReport(openReport.id, entry);
@@ -272,53 +258,6 @@ export function ReportForm({
                 )}
               />
               <FieldError errors={[errors.roadblockId]} />
-
-              {/* 1 km rule, checked against the device's real location */}
-              <div
-                className={cn(
-                  "mt-1 flex flex-col gap-3 rounded-2xl p-3 text-sm sm:flex-row sm:items-center",
-                  !roadblock || !position
-                    ? "bg-slate-100/70 text-slate-700"
-                    : outOfRange
-                      ? "bg-red-50 text-red-800"
-                      : "bg-emerald-50 text-emerald-800",
-                )}
-              >
-                <div className="flex flex-1 items-start gap-2">
-                  {outOfRange ? <MapPinOff className="mt-0.5 size-4 shrink-0" /> : <LocateFixed className="mt-0.5 size-4 shrink-0" />}
-                  <div className="min-w-0">
-                    <p className="font-medium">
-                      {!position
-                        ? "Share your location to check you're within 1 km of the roadblock."
-                        : !roadblock
-                          ? "Reports are limited to within 1 km of a roadblock."
-                          : outOfRange
-                            ? `You are ${formatDistance(distance!)} away. Move within 1 km to report.`
-                            : `You are ${formatDistance(distance!)} from this site. Within range.`}
-                    </p>
-                    <p className={cn("text-xs", locStatus === "error" ? "text-rose-700" : "opacity-75")}>
-                      {locStatus === "locating"
-                        ? "Finding you…"
-                        : locStatus === "error"
-                          ? locError
-                          : position
-                            ? `Your location: ${position.label}`
-                            : "Your location is only used for this check."}
-                    </p>
-                  </div>
-                </div>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant={position ? "outline" : "default"}
-                  disabled={locStatus === "locating"}
-                  className={cn("h-9 shrink-0 rounded-full px-3.5", position ? "bg-white" : "bg-blue-700 hover:bg-blue-800")}
-                  onClick={() => void locate()}
-                >
-                  {locStatus === "locating" ? <LoaderCircle className="animate-spin" /> : <Crosshair />}
-                  {position ? "Refresh location" : "Use my location"}
-                </Button>
-              </div>
             </Field>
 
             <div className="grid gap-6 sm:grid-cols-2">
@@ -413,7 +352,7 @@ export function ReportForm({
           <Button
             type="submit"
             size="lg"
-            disabled={blocked || form.formState.isSubmitting}
+            disabled={form.formState.isSubmitting}
             className="h-12 rounded-full bg-blue-700 px-6 text-base shadow-lg shadow-blue-800/25 hover:bg-blue-800"
           >
             {openReport ? <Stamp /> : <Send />}

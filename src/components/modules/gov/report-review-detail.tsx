@@ -63,11 +63,8 @@ function SummaryFrame({
     { icon: Tag, label: "Category", value: categoryLabel(first.category) },
     { icon: Clock, label: "Filed", value: `${formatDateTime(report.createdAt)}${now ? ` · ${relativeTime(report.createdAt, now)}` : ""}` },
     { icon: Clock, label: "Last update", value: formatDateTime(latest.at) },
-    {
-      icon: LocateFixed,
-      label: "Distance at filing",
-      value: first.distanceM !== undefined ? `${formatDistance(first.distanceM)} from pin` : "Within 1 km (verified)",
-    },
+    // Only older reports recorded where they were filed from.
+    ...(first.distanceM !== undefined ? [{ icon: LocateFixed, label: "Distance at filing", value: `${formatDistance(first.distanceM)} from pin` }] : []),
   ];
 
   return (

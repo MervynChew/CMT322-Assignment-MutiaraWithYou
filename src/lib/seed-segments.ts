@@ -14,7 +14,7 @@ export const SEED_SEGMENTS: Record<string, { pin: LatLng; segments: ClosureSegme
   "rb-02": {
     pin: { lat: 5.34394, lng: 100.30129 },
     segments: [
-      { id: "rb-02-s1", kind: "full", road: "Jalan Sultan Azlan Shah", lengthM: 372, path: [{ lat: 5.34526, lng: 100.30235 }, { lat: 5.34445, lng: 100.30187 }, { lat: 5.34429, lng: 100.30178 }, { lat: 5.34407, lng: 100.30165 }, { lat: 5.34336, lng: 100.30123 }, { lat: 5.34314, lng: 100.30111 }, { lat: 5.34283, lng: 100.30094 }, { lat: 5.34269, lng: 100.30085 }, { lat: 5.34236, lng: 100.30066 }] },
+      { id: "rb-02-s1", kind: "partial", road: "Jalan Sultan Azlan Shah", lengthM: 372, path: [{ lat: 5.34526, lng: 100.30235 }, { lat: 5.34445, lng: 100.30187 }, { lat: 5.34429, lng: 100.30178 }, { lat: 5.34407, lng: 100.30165 }, { lat: 5.34336, lng: 100.30123 }, { lat: 5.34314, lng: 100.30111 }, { lat: 5.34283, lng: 100.30094 }, { lat: 5.34269, lng: 100.30085 }, { lat: 5.34236, lng: 100.30066 }] },
       { id: "rb-02-s2", kind: "partial", road: "Jalan Pantai Jerjak", modes: ["car"], lengthM: 189, path: [{ lat: 5.34527, lng: 100.30313 }, { lat: 5.34528, lng: 100.30312 }, { lat: 5.34544, lng: 100.30285 }, { lat: 5.34557, lng: 100.30265 }, { lat: 5.34527, lng: 100.30247 }, { lat: 5.34458, lng: 100.30206 }] },
     ],
   },
@@ -40,7 +40,7 @@ export const SEED_SEGMENTS: Record<string, { pin: LatLng; segments: ClosureSegme
     pin: { lat: 5.41287, lng: 100.3311 },
     segments: [
       { id: "rb-06-s1", kind: "partial", road: "Jalan Magazine", lengthM: 260, path: [{ lat: 5.41234, lng: 100.33215 }, { lat: 5.41247, lng: 100.33188 }, { lat: 5.41253, lng: 100.33176 }, { lat: 5.41258, lng: 100.33169 }, { lat: 5.41265, lng: 100.33153 }, { lat: 5.41279, lng: 100.33127 }, { lat: 5.41282, lng: 100.3312 }, { lat: 5.41287, lng: 100.3311 }, { lat: 5.41307, lng: 100.3307 }, { lat: 5.4131, lng: 100.33064 }, { lat: 5.41313, lng: 100.33059 }, { lat: 5.41318, lng: 100.33048 }, { lat: 5.41331, lng: 100.33021 }, { lat: 5.41339, lng: 100.33005 }] },
-      { id: "rb-06-s2", kind: "full", road: "Lebuh Lintang", modes: ["car", "motorcycle", "pedestrian"], lengthM: 139, path: [{ lat: 5.41328, lng: 100.33074 }, { lat: 5.4135, lng: 100.33085 }, { lat: 5.41355, lng: 100.33088 }, { lat: 5.41359, lng: 100.3309 }, { lat: 5.41367, lng: 100.33095 }, { lat: 5.41374, lng: 100.33099 }, { lat: 5.41381, lng: 100.33106 }, { lat: 5.41384, lng: 100.33109 }, { lat: 5.41391, lng: 100.33117 }, { lat: 5.414, lng: 100.33127 }, { lat: 5.41403, lng: 100.3313 }, { lat: 5.41425, lng: 100.33152 }] },
+      { id: "rb-06-s2", kind: "partial", road: "Lebuh Lintang", modes: ["car", "motorcycle", "pedestrian"], lengthM: 139, path: [{ lat: 5.41328, lng: 100.33074 }, { lat: 5.4135, lng: 100.33085 }, { lat: 5.41355, lng: 100.33088 }, { lat: 5.41359, lng: 100.3309 }, { lat: 5.41367, lng: 100.33095 }, { lat: 5.41374, lng: 100.33099 }, { lat: 5.41381, lng: 100.33106 }, { lat: 5.41384, lng: 100.33109 }, { lat: 5.41391, lng: 100.33117 }, { lat: 5.414, lng: 100.33127 }, { lat: 5.41403, lng: 100.3313 }, { lat: 5.41425, lng: 100.33152 }] },
     ],
   },
   "rb-07": {

@@ -177,8 +177,8 @@ export async function exportReportsPdf(
       ["Contact", reporterEmail(r.userId, ctx.users)],
       ["Category", categoryLabel(first.category)],
       ["Filed", formatDateTime(r.createdAt)],
-      ["Distance at filing", first.distanceM !== undefined ? `${formatDistance(first.distanceM)} from the pin` : "Within 1 km (verified)"],
     ];
+    if (first.distanceM !== undefined) fields.push(["Distance at filing", `${formatDistance(first.distanceM)} from the pin`]);
     const colW = (W - 2 * M) / 2;
     fields.forEach(([k, v], i) => {
       const x = M + (i % 2) * colW;

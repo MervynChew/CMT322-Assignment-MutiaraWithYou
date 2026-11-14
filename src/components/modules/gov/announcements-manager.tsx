@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { toast } from "sonner";
-import { CalendarDays, Eye, FileText, ListPlus, Megaphone, Pencil, Plus, Radio, Search, Send, Siren, Trash2 } from "lucide-react";
+import { CalendarDays, Eye, FileText, Megaphone, Pencil, Plus, Radio, Search, Send, Siren, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -14,7 +14,7 @@ import { formatDateTime, relativeTime } from "@/lib/time";
 import type { Announcement } from "@/lib/types";
 import { useMinuteNow } from "@/hooks/use-now";
 import { useStore } from "@/store/useStore";
-import { AdminPageHeader, HeaderStat, HeaderSummary, Panel } from "./admin-shell";
+import { AdminPageHeader, HeaderStat, Panel } from "./admin-shell";
 import { AnnouncementForm } from "./announcement-form";
 
 type Lifecycle = "all" | "active" | "upcoming" | "expired";
@@ -63,22 +63,14 @@ export function AnnouncementsManager() {
     <>
       <AdminPageHeader
         eyebrow="Announcements"
-        title="Announcement centre"
-        description={
-          <HeaderSummary
-            stats={
-              <>
-                <HeaderStat icon={Megaphone} value={announcements.length} label="published" />
-                <HeaderStat icon={Radio} value={activeNow} label="active now" tone="bg-emerald-400 text-emerald-950" />
-                <HeaderStat icon={Siren} value={announcements.filter((a) => a.priority === "urgent").length} label="urgent" tone="bg-red-400 text-red-950" />
-                <HeaderStat icon={FileText} value={announcements.filter((a) => a.pdfName).length} label="with PDF" tone="bg-sky-200 text-sky-900" />
-              </>
-            }
-            tips={[
-              { icon: Eye, text: "Every notice here is shown on the public dashboard. Preview, edit or retire it from the list." },
-              { icon: ListPlus, text: "Announcements added in Post publish together with your roadblock changes." },
-            ]}
-          />
+        title="Public notices"
+        description="Everything here shows on the public dashboard."
+        stats={
+          <>
+            <HeaderStat icon={Megaphone} value={announcements.length} label="published" />
+            <HeaderStat icon={Radio} value={activeNow} label="active now" tone="bg-emerald-400 text-emerald-950" />
+            <HeaderStat icon={Siren} value={announcements.filter((a) => a.priority === "urgent").length} label="urgent" tone="bg-red-400 text-red-950" />
+          </>
         }
         actions={
           <Button className="h-10 rounded-full bg-white text-slate-900 hover:bg-blue-50" onClick={() => setComposing(true)}>

@@ -97,7 +97,7 @@ export type ReportEntry = {
   images: string[]; // file names (mock upload)
   /** Browser object URLs for photos uploaded this session (seed data has none). */
   imageUrls?: string[];
-  /** Distance from the roadblock pin when the entry was filed (1 km rule). */
+  /** Older entries: how far from the pin the reporter was when filing, and where. */
   distanceM?: number;
   positionLabel?: string;
 };

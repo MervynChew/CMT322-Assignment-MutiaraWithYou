@@ -26,7 +26,7 @@ import type {
 let counter = 0;
 const uid = (prefix: string) => `${prefix}-${Date.now().toString(36)}${(counter++).toString(36)}`;
 
-/** Where the viewer is, from their device (used for the 1 km reporting rule). */
+/** Where the viewer is, from their device (used for nearby alerts). */
 export type UserPosition = LatLng & { label: string; accuracy?: number; at: string };
 
 type NewChange =
@@ -54,7 +54,7 @@ type State = {
   /** Announcements drafted in the Post tab; published on Post / Confirm. */
   pendingAnnouncements: PendingAnnouncement[];
   activity: ActivityItem[];
-  /** Viewer position used for the 1 km reporting rule (unknown until they share it). */
+  /** Viewer position for nearby alerts (unknown until they share it). */
   position: UserPosition | null;
 };
 
