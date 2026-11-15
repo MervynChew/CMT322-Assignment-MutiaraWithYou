@@ -14,11 +14,14 @@ import { AREAS, CONSTRUCTION_PHASES } from "@/lib/mock-data";
 import { formatDistance, segmentReach } from "@/lib/geo";
 import { CLOSURE_TYPES, closureTypeOf } from "@/lib/closure-type";
 import { formatDate, formatPeriod, formatWindow } from "@/lib/time";
+import { useMinuteNow } from "@/hooks/use-now";
 import type { ArchivedRoadblock, ClosureSegment, ClosureType, Roadblock, TravelMode } from "@/lib/types";
 import { ModePicker, modesLabel, segmentModes } from "@/components/shared/travel-modes";
 import { CLOSURE_PRESETS, RADIUS_MAX, RADIUS_MIN, type ClosurePreset } from "./closure-presets";
 
 const RADIUS_PRESETS = [100, 250, 500, 1000];
+/** "Completed", the last construction phase. */
+const LAST_PHASE = CONSTRUCTION_PHASES.length - 1;
 
 /**
  * Fields shown on the map (the pin's colour and badge, its blocked zone and
@@ -108,6 +111,31 @@ export function RoadblockInspector({
   const minRadius = Math.max(RADIUS_MIN, Math.ceil(reach / 10) * 10);
 
   const set = <K extends keyof Roadblock>(k: K, v: Roadblock[K]) => setForm((f) => ({ ...f, [k]: v }));
+  const now = useMinuteNow();
+
+  /**
+   * Updates the canvas draft, keeping the construction phase in step with the
+   * status: completed works are in the "Completed" phase, and reopening them
+   * moves the phase back to the last working one.
+   */
+  function patchLive(p: Partial<Roadblock>) {
+    if (p.status && p.status !== form.status) {
+      if (p.status === "completed") set("phaseIndex", LAST_PHASE);
+      else if (form.phaseIndex === LAST_PHASE) set("phaseIndex", LAST_PHASE - 1);
+    }
+    onPatch(p);
+  }
+
+  /** The phase decides whether the works are completed, so the pin's colour follows it. */
+  function choosePhase(i: number) {
+    set("phaseIndex", i);
+    if (i === LAST_PHASE && form.status !== "completed") onPatch({ status: "completed" });
+    else if (i !== LAST_PHASE && form.status === "completed") {
+      onPatch({ status: new Date(form.startDate).getTime() > Date.now() ? "scheduled" : "active" });
+    }
+  }
+  /** Reopened works whose end date has passed show as overdue on the map. */
+  const pastEnd = now !== null && form.status !== "completed" && new Date(form.endDate).getTime() < now;
 
   /** Picking a closure type updates the pin on the map straight away, and brings drawn stretches in line. */
   function chooseType(p: ClosurePreset) {
@@ -127,7 +155,7 @@ export function RoadblockInspector({
     if (p.id !== "scheduled" && segments.some((s) => s.kind !== next.closure)) {
       patch.segments = segments.map((s) => ({ ...s, kind: next.closure }));
     }
-    onPatch(patch);
+    patchLive(patch);
   }
 
   /** The form as a roadblock, or null (with the error shown) when it isn't valid yet. */
@@ -147,10 +175,11 @@ export function RoadblockInspector({
 
   function markDone() {
     const rb = validated();
-    if (rb) onMarkDone({ ...rb, status: "completed" });
+    if (rb) onMarkDone({ ...rb, status: "completed", phaseIndex: LAST_PHASE });
   }
 
-  const canMarkDone = !isNew && !takingDown && !archived && form.status === "completed";
+  /** Only when the construction phase is "Completed" can the roadblock come off the public map. */
+  const canMarkDone = !isNew && !takingDown && !archived && form.phaseIndex === LAST_PHASE;
 
   const sel = "h-9 w-full rounded-xl data-[size=default]:h-9";
 
@@ -403,7 +432,7 @@ export function RoadblockInspector({
             </div>
             <div className="grid gap-1.5">
               <Label className="text-xs text-slate-500">Status</Label>
-              <Select value={form.status} onValueChange={(v) => onPatch({ status: v as Roadblock["status"] })}>
+              <Select value={form.status} onValueChange={(v) => patchLive({ status: v as Roadblock["status"] })}>
                 <SelectTrigger className={sel}><SelectValue /></SelectTrigger>
                 <SelectContent position="popper" className="z-[1300]">
                   <SelectItem value="scheduled">Scheduled</SelectItem>
@@ -441,9 +470,18 @@ export function RoadblockInspector({
             </div>
             <div className="grid gap-1.5">
               <Label htmlFor="ins-end" className="text-xs text-slate-500">End date</Label>
-              <Input id="ins-end" type="date" value={toDateInput(form.endDate)} onChange={(e) => e.target.value && onPatch({ endDate: fromDateInput(e.target.value) })} className="h-9 rounded-xl" />
+              <Input id="ins-end" type="date" value={toDateInput(form.endDate)} onChange={(e) => e.target.value && onPatch({ endDate: fromDateInput(e.target.value) })} className={cn("h-9 rounded-xl", pastEnd && "border-rose-300 ring-2 ring-rose-100")} />
             </div>
           </div>
+          {pastEnd && (
+            <p className="-mt-2 flex items-start gap-2 text-xs leading-snug text-rose-700">
+              <span aria-hidden className="mt-1 size-2 shrink-0 rounded-full bg-rose-600" />
+              <span>
+                The end date has passed, so the map shows this as <b className="font-semibold">overdue</b> (rose pin). Set a new end date to show it as{" "}
+                {CLOSURE_TYPES[type].label.toLowerCase()}.
+              </span>
+            </p>
+          )}
 
           <div className="rounded-2xl bg-slate-50 p-3">
             <label className="flex items-center justify-between gap-3 text-xs font-medium">
@@ -484,7 +522,7 @@ export function RoadblockInspector({
 
           <div className="grid gap-1.5">
             <Label className="text-xs text-slate-500">Construction phase</Label>
-            <Select value={String(form.phaseIndex)} onValueChange={(v) => set("phaseIndex", Number(v))}>
+            <Select value={String(form.phaseIndex)} onValueChange={(v) => choosePhase(Number(v))}>
               <SelectTrigger className={sel}><SelectValue /></SelectTrigger>
               <SelectContent position="popper" className="z-[1300]">
                 {CONSTRUCTION_PHASES.map((p, i) => <SelectItem key={p} value={String(i)}>{i + 1}. {p}</SelectItem>)}
@@ -507,37 +545,41 @@ export function RoadblockInspector({
         </div>
       )}
 
-      {canMarkDone && (
-        <div className="flex items-center gap-2.5 border-t border-teal-100 bg-teal-50/80 px-3 py-2.5">
-          <CircleCheck aria-hidden className="size-4 shrink-0 text-teal-600" />
-          <p className="min-w-0 flex-1 text-xs leading-snug text-teal-950">
-            <b className="font-semibold">Works completed.</b> Take it off the public map and home page. You can restore it later.
-          </p>
-          <Button size="sm" className="shrink-0 rounded-full bg-teal-600 hover:bg-teal-700" onClick={markDone}>
-            Mark as done
-          </Button>
-        </div>
-      )}
-
-      <footer className="flex items-center gap-2 border-t border-slate-100 p-3">
-        {!isNew && !takingDown && !archived && (
-          <Button variant="destructive" size="sm" className="rounded-full" onClick={() => onRemove(form)}>
-            <Trash2 /> Remove
-          </Button>
-        )}
-        <div className="ml-auto flex gap-2">
-          <Button variant="ghost" size="sm" className="rounded-full" onClick={onCancel}>Cancel</Button>
-          {archived ? (
-            <Button size="sm" className="rounded-full bg-blue-700 hover:bg-blue-800" onClick={() => onRestore(archived.roadblock)}>
-              <ArchiveRestore /> Restore
+      <footer className="space-y-2.5 border-t border-slate-100 p-3">
+        {canMarkDone && (
+          <div className="rounded-2xl bg-teal-50 p-2.5 ring-1 ring-teal-100">
+            <p className="flex items-start gap-2 px-0.5 text-xs leading-snug text-teal-950">
+              <CircleCheck aria-hidden className="mt-px size-3.5 shrink-0 text-teal-600" />
+              <span>
+                <b className="font-semibold">Construction completed.</b> Mark it as done to take it off the public map and home page when
+                you post.
+              </span>
+            </p>
+            <Button size="sm" className="mt-2 h-9 w-full rounded-full bg-teal-600 hover:bg-teal-700" onClick={markDone}>
+              <CircleCheck /> Mark as done
             </Button>
-          ) : (
-            !takingDown && (
-              <Button size="sm" className="rounded-full bg-blue-700 hover:bg-blue-800" onClick={save}>
-                {isNew ? "Add to receipt" : "Queue changes"}
-              </Button>
-            )
+          </div>
+        )}
+        <div className="flex items-center gap-2">
+          {!isNew && !takingDown && !archived && (
+            <Button variant="destructive" size="sm" className="rounded-full" onClick={() => onRemove(form)}>
+              <Trash2 /> Remove
+            </Button>
           )}
+          <div className="ml-auto flex gap-2">
+            <Button variant="ghost" size="sm" className="rounded-full" onClick={onCancel}>Cancel</Button>
+            {archived ? (
+              <Button size="sm" className="rounded-full bg-blue-700 hover:bg-blue-800" onClick={() => onRestore(archived.roadblock)}>
+                <ArchiveRestore /> Restore
+              </Button>
+            ) : (
+              !takingDown && (
+                <Button size="sm" className="rounded-full bg-blue-700 hover:bg-blue-800" onClick={save}>
+                  {isNew ? "Add to receipt" : "Queue changes"}
+                </Button>
+              )
+            )}
+          </div>
         </div>
       </footer>
     </div>

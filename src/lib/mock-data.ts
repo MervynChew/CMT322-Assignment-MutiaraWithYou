@@ -421,7 +421,7 @@ export function buildSeed(shiftDays = 0): Seed {
         startDate: d(-150),
         endDate: d(-40),
         dailyWindow: { start: "09:00", end: "16:00" },
-        phaseIndex: 5,
+        phaseIndex: 6,
         description: "Daytime lane closure while utilities were moved for the Sungai Tiram station entrance. Works finished and the lane reopened.",
         detour: "—",
         image: SITE_IMAGES[2],

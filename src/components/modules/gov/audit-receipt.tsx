@@ -360,9 +360,16 @@ export function AuditReceipt({
   );
 }
 
+/** What each take-down means, shown above its group in the Post warning. */
+const TAKE_DOWN = {
+  done: { label: "Mark as done", heading: "text-teal-700", meaning: "Works finished and the road has reopened." },
+  remove: { label: "Remove", heading: "text-rose-700", meaning: "For a roadblock added by mistake, or works that are no longer going ahead." },
+} as const;
+
 /**
  * Asked on Post when it would take roadblocks off the public map (removed, or
- * marked as done), so the admin can check they picked the right ones.
+ * marked as done), so the admin can check they picked the right ones and knows
+ * what happens next.
  */
 function ConfirmTakeDown({
   open,
@@ -381,11 +388,26 @@ function ConfirmTakeDown({
   onConfirm: () => void;
   onShow?: (c: PendingChange) => void;
 }) {
+  const reports = useStore((s) => s.reports);
   const n = leaving.length;
+  const one = n === 1;
+  const ids = new Set(leaving.map((c) => c.roadblock.id));
+  const linked = reports.filter((r) => ids.has(r.roadblockId)).length;
   const also = [
     others && `${others} other roadblock change${others === 1 ? "" : "s"}`,
     announcements && `${announcements} announcement${announcements === 1 ? "" : "s"}`,
   ].filter(Boolean);
+  const groups = (["done", "remove"] as const)
+    .map((kind) => ({ kind, items: leaving.filter((c) => c.kind === kind) }))
+    .filter((g) => g.items.length > 0);
+  const consequences = [
+    `${one ? "It disappears" : "They disappear"} from the public map and home page, so drivers no longer see ${one ? "this closure" : "these closures"}.`,
+    `Citizens can't send new reports or updates on ${one ? "it" : "them"}.` +
+      (linked ? ` The ${linked} report${linked === 1 ? "" : "s"} already sent stay${linked === 1 ? "s" : ""} in Reports.` : ""),
+    `${one ? "It moves" : "They move"} to Past roadblocks (admin only). Picked the wrong one? Restore it there and post again.`,
+    also.length > 0 && `This post also publishes ${also.join(" and ")}.`,
+  ].filter((x): x is string => Boolean(x));
+
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onCancel()}>
       <DialogContent className="scroll-inset max-h-[90vh] overflow-y-auto rounded-3xl p-6 sm:max-w-md">
@@ -394,47 +416,64 @@ function ConfirmTakeDown({
             <TriangleAlert className="size-5" />
           </span>
           <DialogTitle className="text-xl">
-            Take {n === 1 ? "this roadblock" : `these ${n} roadblocks`} off the public map?
+            Take {one ? "this roadblock" : `these ${n} roadblocks`} off the public map?
           </DialogTitle>
-          <DialogDescription>
-            Check {n === 1 ? "it's" : "they're"} the right {n === 1 ? "one" : "ones"}. Once posted, the public no longer sees {n === 1 ? "it" : "them"} on the map or home page.
-          </DialogDescription>
+          <DialogDescription>Check each one before you post.</DialogDescription>
         </DialogHeader>
 
-        <ul className="space-y-2">
-          {leaving.map((c) => {
-            const rb = c.roadblock;
-            const k = KIND[c.kind];
-            return (
-              <li key={c.id} className="relative overflow-hidden rounded-2xl bg-white ring-1 ring-slate-200">
-                <span aria-hidden className={cn("absolute inset-y-0 left-0 w-1", k.bar)} />
-                <div className="flex items-start gap-2 py-2.5 pr-2 pl-4">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className={cn("inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold ring-1", k.chip)}>
-                        <k.icon className="size-3" strokeWidth={3} /> {c.kind === "done" ? "Mark as done" : "Remove"}
-                      </span>
-                      <p className="leading-snug font-semibold text-slate-900">{rb.road || "Untitled roadblock"}</p>
-                    </div>
-                    <p className="mt-1 text-xs leading-snug text-slate-500">
-                      {AREAS.find((a) => a.id === rb.areaId)?.name} · {CLOSURE_TYPES[closureTypeOf(rb)].label} · {formatPeriod(rb.startDate, rb.endDate)}
-                    </p>
-                  </div>
-                  {onShow && (
-                    <Button variant="ghost" size="sm" className="h-8 shrink-0 rounded-full px-2.5 text-blue-700 hover:bg-blue-50" onClick={() => onShow(c)}>
-                      <Crosshair /> Show
-                    </Button>
-                  )}
-                </div>
-              </li>
-            );
-          })}
-        </ul>
+        {groups.map(({ kind, items }) => {
+          const t = TAKE_DOWN[kind];
+          const k = KIND[kind];
+          return (
+            <section key={kind} aria-label={t.label}>
+              <h4 className={cn("flex items-center gap-1.5 text-xs font-semibold tracking-wider uppercase", t.heading)}>
+                <k.icon className="size-3.5" strokeWidth={3} /> {t.label} · {items.length}
+              </h4>
+              <p className="mt-0.5 mb-2 text-xs text-slate-500">{t.meaning}</p>
+              <ul className="space-y-2">
+                {items.map((c) => {
+                  const rb = c.roadblock;
+                  const looksDone = kind === "remove" && rb.phaseIndex === CONSTRUCTION_PHASES.length - 1;
+                  return (
+                    <li key={c.id} className="relative overflow-hidden rounded-2xl bg-white ring-1 ring-slate-200">
+                      <span aria-hidden className={cn("absolute inset-y-0 left-0 w-1", k.bar)} />
+                      <div className="flex items-start gap-2 py-2.5 pr-2 pl-4">
+                        <div className="min-w-0 flex-1">
+                          <p className="leading-snug font-semibold text-slate-900">{rb.road || "Untitled roadblock"}</p>
+                          <p className="mt-0.5 text-xs leading-snug text-slate-500">
+                            {AREAS.find((a) => a.id === rb.areaId)?.name} · {CLOSURE_TYPES[closureTypeOf(rb)].label} · {formatPeriod(rb.startDate, rb.endDate)}
+                          </p>
+                          {looksDone && (
+                            <p className="mt-1 text-xs leading-snug text-amber-700">
+                              Works are completed. If the road has reopened, Mark as done fits better than Remove.
+                            </p>
+                          )}
+                        </div>
+                        {onShow && (
+                          <Button variant="ghost" size="sm" className="h-8 shrink-0 rounded-full px-2.5 text-blue-700 hover:bg-blue-50" onClick={() => onShow(c)}>
+                            <Crosshair /> Show
+                          </Button>
+                        )}
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            </section>
+          );
+        })}
 
-        <p className="text-xs leading-relaxed text-slate-500">
-          {also.length > 0 && <>This post also publishes {also.join(" and ")}. </>}
-          Taken down by mistake? Restore it from Past roadblocks.
-        </p>
+        <div className="rounded-2xl bg-slate-50 p-3 ring-1 ring-slate-200">
+          <p className="text-xs font-semibold text-slate-800">When you post</p>
+          <ul className="mt-1.5 space-y-1 text-xs leading-snug text-slate-600">
+            {consequences.map((line) => (
+              <li key={line} className="flex gap-2">
+                <span aria-hidden className="mt-1.5 size-1 shrink-0 rounded-full bg-slate-400" />
+                <span>{line}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
 
         <DialogFooter className="gap-2">
           <Button variant="outline" className="rounded-full" onClick={onCancel} autoFocus>
