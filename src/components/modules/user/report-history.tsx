@@ -10,7 +10,7 @@ import { cn } from "@/lib/utils";
 import { AREAS } from "@/lib/mock-data";
 import { formatDateTime } from "@/lib/time";
 import type { Report } from "@/lib/types";
-import { useCurrentUser, useSessionUserId, useStore } from "@/store/useStore";
+import { findRoadblock, useCurrentUser, useSessionUserId, useStore } from "@/store/useStore";
 import { ReportStatusLine } from "./report-status-line";
 
 export function ReportStatusChips({ report }: { report: Report }) {
@@ -43,7 +43,9 @@ function ReportCard({
   onAddUpdate: (roadblockId: string) => void;
   onView: (id: string) => void;
 }) {
-  const roadblock = useStore((s) => s.roadblocks.find((r) => r.id === report.roadblockId));
+  // Past roadblocks (off the public map) keep their name here, but can't take updates.
+  const roadblock = useStore((s) => findRoadblock(s, report.roadblockId));
+  const live = useStore((s) => s.roadblocks.some((r) => r.id === report.roadblockId));
   const area = AREAS.find((a) => a.id === roadblock?.areaId);
   const [expanded, setExpanded] = useState(false);
   const latest = report.entries[report.entries.length - 1];
@@ -93,7 +95,7 @@ function ReportCard({
             </button>
           )}
           <div className="ml-auto flex gap-1.5">
-            {!report.viewed && (
+            {!report.viewed && live && (
               <Button size="xs" variant="outline" className="rounded-full" onClick={() => onAddUpdate(report.roadblockId)}>
                 <PenLine /> Add update
               </Button>
@@ -140,9 +142,9 @@ function ReportViewer({
   onClose: () => void;
   onAddUpdate: (roadblockId: string) => void;
 }) {
-  const roadblocks = useStore((s) => s.roadblocks);
   const user = useCurrentUser();
-  const roadblock = roadblocks.find((r) => r.id === report?.roadblockId);
+  const roadblock = useStore((s) => findRoadblock(s, report?.roadblockId));
+  const live = useStore((s) => s.roadblocks.some((r) => r.id === report?.roadblockId));
 
   return (
     <Dialog open={!!report} onOpenChange={(o) => !o && onClose()}>
@@ -185,7 +187,7 @@ function ReportViewer({
               </div>
             </div>
 
-            {!report.viewed && (
+            {!report.viewed && live && (
               <div className="flex shrink-0 items-center justify-end gap-2 border-t border-slate-200 bg-white px-5 py-3">
                 <p className="mr-auto hidden text-xs text-slate-500 sm:block">Not reviewed yet, so you can still add to it.</p>
                 <Button variant="ghost" className="rounded-full" onClick={onClose}>Close</Button>

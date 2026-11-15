@@ -15,7 +15,7 @@ import { ADMIN_USER_ID, REPORT_CATEGORIES, reporterName } from "@/lib/mock-data"
 import { exportReportsPdf } from "@/lib/report-pdf";
 import { formatDateTime } from "@/lib/time";
 import type { Report } from "@/lib/types";
-import { useStore } from "@/store/useStore";
+import { findRoadblock, useStore } from "@/store/useStore";
 
 type SortKey = "id" | "roadblock" | "category" | "status" | "date" | "focus";
 type SortDir = "asc" | "desc";
@@ -65,7 +65,8 @@ export function ReportReviewTable({ onOpen }: { onOpen: (id: string) => void }) 
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [exporting, setExporting] = useState(false);
 
-  const roadName = (id: string) => roadblocks.find((r) => r.id === id)?.road ?? "Removed roadblock";
+  const archive = useStore((s) => s.archive);
+  const roadName = (id: string) => findRoadblock({ roadblocks, archive }, id)?.road ?? "Removed roadblock";
 
   const rows = useMemo(() => {
     const needle = q.trim().toLowerCase();

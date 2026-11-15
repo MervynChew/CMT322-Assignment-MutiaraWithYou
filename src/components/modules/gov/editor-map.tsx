@@ -3,15 +3,18 @@
 // Client-only (loaded with next/dynamic ssr:false): interactive admin canvas.
 import { useEffect, useState } from "react";
 import { Circle, CircleMarker, Marker, Polyline, Tooltip, useMap, useMapEvents, ZoomControl } from "react-leaflet";
-import type { ClosureType, LatLng, PendingChange, Roadblock } from "@/lib/types";
+import type { ArchivedRoadblock, ClosureType, LatLng, PendingChange, Roadblock } from "@/lib/types";
 import { BaseLayers, FocusController, PENANG_CENTER, SizeInvalidator, type MapFocus } from "@/components/modules/map/base-layers";
 import { roadblockIcon } from "@/components/modules/map/pins";
 import { SegmentLines } from "@/components/modules/map/segment-lines";
 import { StableMap } from "@/components/modules/map/stable-map";
 import { cn } from "@/lib/utils";
 import { haversine } from "@/lib/geo";
+import { formatShortDate } from "@/lib/time";
+import { takesDown } from "@/store/useStore";
 
-export type EditorLayers = { line: boolean; stations: boolean; completed: boolean };
+/** `completed`: finished works still on the public map. `past`: roadblocks taken off it (Past roadblocks). */
+export type EditorLayers = { line: boolean; stations: boolean; completed: boolean; past: boolean };
 
 /** In-progress drawing shown on the canvas. */
 export type DrawPreview = {
@@ -29,6 +32,8 @@ export type RejectFlash = { at: LatLng; key: number };
 export type EditorMapProps = {
   roadblocks: Roadblock[];
   pending: PendingChange[];
+  /** Past roadblocks, shown in grey when the layer is on (not draggable; clicking opens them to restore). */
+  archived: ArchivedRoadblock[];
   placing: boolean;
   selectedId: string | null;
   focus: MapFocus | null;
@@ -71,6 +76,7 @@ function DrawMode({ active }: { active: boolean }) {
 export default function EditorMap({
   roadblocks,
   pending,
+  archived,
   placing,
   selectedId,
   focus,
@@ -87,11 +93,13 @@ export default function EditorMap({
 }: EditorMapProps) {
   const [hover, setHover] = useState<LatLng | null>(null);
   const pendingById = new Map(pending.map((c) => [c.roadblock.id, c.kind]));
-  // Show queued removals faded so admins can still see what's being deleted.
-  const removed = pending.filter((c) => c.kind === "remove").map((c) => c.roadblock);
-  const pins = [...roadblocks, ...removed].filter(
-    (rb) => layers.completed || rb.status !== "completed" || rb.id === selectedId,
+  // Show what's queued to come off the map faded, so admins can still see what's going.
+  const leaving = pending.filter(takesDown).map((c) => c.roadblock);
+  const pins = [...roadblocks, ...leaving].filter(
+    (rb) => layers.completed || rb.status !== "completed" || rb.id === selectedId || pendingById.has(rb.id),
   );
+  // Past roadblocks queued to come back are already among `roadblocks`.
+  const past = archived.filter((a) => !pendingById.has(a.roadblock.id) && (layers.past || a.roadblock.id === selectedId));
   const selected = pins.find((r) => r.id === selectedId);
   const crosshair = placing || !!drawing;
   // While drawing, pins let clicks through so a point can be placed right next to (or under) one.
@@ -132,13 +140,36 @@ export default function EditorMap({
         />
       )}
 
+      {/* Past roadblocks: grey, under everything live */}
+      {past.map((a) => (
+        <SegmentLines key={`past-seg-${a.roadblock.id}`} roadblock={a.roadblock} muted dim={!!drawing} onClick={drawing ? undefined : onSelect} />
+      ))}
+      {past.map((a) => (
+        <Marker
+          key={`past-${a.roadblock.id}`}
+          position={[a.roadblock.lat, a.roadblock.lng]}
+          icon={roadblockIcon(a.roadblock, { archived: true, selected: a.roadblock.id === selectedId })}
+          zIndexOffset={a.roadblock.id === selectedId ? 1000 : -500}
+          opacity={drawing ? 0.4 : 1}
+          eventHandlers={{ click: () => !drawing && onSelect(a.roadblock.id) }}
+        >
+          {!drawing && (
+            <Tooltip direction="top" offset={[0, -18]}>
+              <span className="font-semibold">{a.roadblock.road}</span>
+              <br />
+              {a.reason === "done" ? "Marked done" : "Removed"} {formatShortDate(a.at)} · click to restore
+            </Tooltip>
+          )}
+        </Marker>
+      ))}
+
       {/* Drawn closure segments */}
       {pins.map((rb) => (
         <SegmentLines
           key={`seg-${rb.id}`}
           roadblock={rb}
           emphasis={rb.id === selectedId}
-          dim={pendingById.get(rb.id) === "remove" || (!!drawing && rb.id !== selectedId)}
+          dim={pendingById.get(rb.id) === "remove" || pendingById.get(rb.id) === "done" || (!!drawing && rb.id !== selectedId)}
           onClick={drawing ? undefined : onSelect}
         />
       ))}
@@ -203,7 +234,7 @@ export default function EditorMap({
           <Marker
             key={rb.id}
             position={[rb.lat, rb.lng]}
-            draggable={kind !== "remove" && !drawing}
+            draggable={kind !== "remove" && kind !== "done" && !drawing}
             icon={roadblockIcon(rb, {
               selected: rb.id === selectedId,
               pending: kind,
@@ -223,7 +254,7 @@ export default function EditorMap({
               <Tooltip direction="top" offset={[0, -18]}>
                 <span className="font-semibold">{rb.road || "Untitled roadblock"}</span>
                 <br />
-                {kind === "remove" ? "Queued for removal" : "Click to edit · drag to move"}
+                {kind === "remove" ? "Queued for removal" : kind === "done" ? "Queued to mark as done" : "Click to edit · drag to move"}
               </Tooltip>
             )}
           </Marker>

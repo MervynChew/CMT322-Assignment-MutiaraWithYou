@@ -1,15 +1,18 @@
 "use client";
 
-import { Check, Crosshair, Eraser, Megaphone, Minus, PencilLine, Plus, ReceiptText, Send, Undo2 } from "lucide-react";
+import { useState } from "react";
+import { ArchiveRestore, Check, CircleCheck, Crosshair, Eraser, Megaphone, Minus, PencilLine, Plus, ReceiptText, Send, TriangleAlert, Undo2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { ADMIN_USER_ID, AREAS, CONSTRUCTION_PHASES } from "@/lib/mock-data";
 import { formatDistance } from "@/lib/geo";
-import { formatShortDate, formatWindow } from "@/lib/time";
+import { formatPeriod, formatShortDate, formatWindow } from "@/lib/time";
+import { CLOSURE_TYPES, closureTypeOf } from "@/lib/closure-type";
 import { effectiveModes, modesLabel } from "@/components/shared/travel-modes";
 import type { PendingChange, Roadblock } from "@/lib/types";
-import { useStore } from "@/store/useStore";
+import { takesDown, useStore } from "@/store/useStore";
 
 const time = new Intl.DateTimeFormat("en-MY", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Kuala_Lumpur" });
 
@@ -58,10 +61,26 @@ function line(c: PendingChange) {
         segmentSummary(c.roadblock) ?? "Pin only (nothing drawn)",
       ],
     };
-  if (c.kind === "remove") return { sign: "−", title: `Removed ${name}`, details: ["Pin will be deleted"] };
+  if (c.kind === "remove")
+    return { sign: "−", title: `Removed ${name}`, details: ["Comes off the public map and home page", PAST_NOTE] };
+  if (c.kind === "done") {
+    const edits = diff(c.before, c.roadblock).filter((d) => d !== "No field changes" && !d.startsWith("Status"));
+    return { sign: "✓", title: `Marked ${name} as done`, details: ["Works completed: comes off the public map and home page", ...edits, PAST_NOTE] };
+  }
+  if (c.kind === "restore")
+    return {
+      sign: "+",
+      title: `Restored ${name}`,
+      details: [
+        "Back on the public map from Past roadblocks",
+        c.roadblock.status === "completed" ? "Shows as completed (road reopened)" : `Shows as ${CLOSURE_TYPES[closureTypeOf(c.roadblock)].label.toLowerCase()}`,
+      ],
+    };
   return { sign: "~", title: `Edited ${name}`, details: diff(c.before, c.roadblock) };
 }
 
+
+const PAST_NOTE = "Kept under Past roadblocks, so it can be restored";
 
 /** Zig-zag torn paper edge. */
 function Zigzag({ flip }: { flip?: boolean }) {
@@ -73,6 +92,8 @@ const KIND: Record<PendingChange["kind"], { label: string; icon: typeof Plus; ch
   add: { label: "Added", icon: Plus, chip: "bg-emerald-50 text-emerald-700 ring-emerald-200", bar: "bg-emerald-500" },
   edit: { label: "Edited", icon: PencilLine, chip: "bg-blue-50 text-blue-700 ring-blue-200", bar: "bg-blue-500" },
   remove: { label: "Removed", icon: Minus, chip: "bg-rose-50 text-rose-700 ring-rose-200", bar: "bg-rose-500" },
+  done: { label: "Done", icon: CircleCheck, chip: "bg-teal-50 text-teal-700 ring-teal-200", bar: "bg-teal-500" },
+  restore: { label: "Restored", icon: ArchiveRestore, chip: "bg-sky-50 text-sky-700 ring-sky-200", bar: "bg-sky-500" },
 };
 
 /** Takes the admin to the announcement form below the receipt. */
@@ -108,17 +129,22 @@ export function AuditReceipt({
   const commitChanges = useStore((s) => s.commitChanges);
   const operator = useStore((s) => s.users.find((u) => u.id === ADMIN_USER_ID)?.name ?? "Admin");
 
-  const counts = {
-    add: pending.filter((c) => c.kind === "add").length,
-    edit: pending.filter((c) => c.kind === "edit").length,
-    remove: pending.filter((c) => c.kind === "remove").length,
-  };
+  const count = (...kinds: PendingChange["kind"][]) => pending.filter((c) => kinds.includes(c.kind)).length;
   const total = pending.length + pendingAnnouncements.length;
   // Every post tells the public what changed: it needs at least one announcement.
   const hasAnnouncement = pendingAnnouncements.length > 0;
   const canPost = total > 0 && hasAnnouncement;
+  /** Roadblocks this post takes off the public map: Post asks before posting them. */
+  const leaving = pending.filter(takesDown);
+  const [confirming, setConfirming] = useState(false);
+
+  function requestPost() {
+    if (leaving.length) setConfirming(true);
+    else post();
+  }
 
   function post() {
+    setConfirming(false);
     const n = commitChanges();
     const parts = [
       n.roadblocks && `${n.roadblocks} roadblock change${n.roadblocks === 1 ? "" : "s"}`,
@@ -138,11 +164,12 @@ export function AuditReceipt({
         </div>
 
         {/* Summary */}
-        <dl className="mt-4 grid grid-cols-4 gap-1.5 text-center">
+        <dl className="mt-4 grid grid-cols-5 gap-1.5 text-center">
           {[
-            { label: "Added", value: counts.add, cls: "text-emerald-700" },
-            { label: "Edited", value: counts.edit, cls: "text-blue-700" },
-            { label: "Removed", value: counts.remove, cls: "text-rose-700" },
+            { label: "Added", value: count("add", "restore"), cls: "text-emerald-700" },
+            { label: "Edited", value: count("edit"), cls: "text-blue-700" },
+            { label: "Done", value: count("done"), cls: "text-teal-700" },
+            { label: "Removed", value: count("remove"), cls: "text-rose-700" },
             { label: "Notices", value: pendingAnnouncements.length, cls: "text-indigo-700" },
           ].map((s) => (
             <div key={s.label} className="rounded-xl bg-slate-50 px-1 py-2">
@@ -302,7 +329,7 @@ export function AuditReceipt({
               >
                 <Eraser /> Clear
               </Button>
-              <Button className="h-10 flex-1 rounded-full bg-blue-700 hover:bg-blue-800" disabled={!canPost} onClick={post}>
+              <Button className="h-10 flex-1 rounded-full bg-blue-700 hover:bg-blue-800" disabled={!canPost} onClick={requestPost}>
                 <Send /> Post / Confirm
               </Button>
             </div>
@@ -313,7 +340,112 @@ export function AuditReceipt({
         )}
       </div>
       <Zigzag />
+
+      <ConfirmTakeDown
+        open={confirming}
+        leaving={leaving}
+        others={pending.length - leaving.length}
+        announcements={pendingAnnouncements.length}
+        onCancel={() => setConfirming(false)}
+        onConfirm={post}
+        onShow={
+          onSelect &&
+          ((c) => {
+            setConfirming(false);
+            onSelect(c);
+          })
+        }
+      />
     </div>
+  );
+}
+
+/**
+ * Asked on Post when it would take roadblocks off the public map (removed, or
+ * marked as done), so the admin can check they picked the right ones.
+ */
+function ConfirmTakeDown({
+  open,
+  leaving,
+  others,
+  announcements,
+  onCancel,
+  onConfirm,
+  onShow,
+}: {
+  open: boolean;
+  leaving: PendingChange[];
+  others: number;
+  announcements: number;
+  onCancel: () => void;
+  onConfirm: () => void;
+  onShow?: (c: PendingChange) => void;
+}) {
+  const n = leaving.length;
+  const also = [
+    others && `${others} other roadblock change${others === 1 ? "" : "s"}`,
+    announcements && `${announcements} announcement${announcements === 1 ? "" : "s"}`,
+  ].filter(Boolean);
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && onCancel()}>
+      <DialogContent className="scroll-inset max-h-[90vh] overflow-y-auto rounded-3xl p-6 sm:max-w-md">
+        <DialogHeader>
+          <span className="mb-1 flex size-10 items-center justify-center rounded-2xl bg-rose-50 text-rose-600 ring-1 ring-rose-100">
+            <TriangleAlert className="size-5" />
+          </span>
+          <DialogTitle className="text-xl">
+            Take {n === 1 ? "this roadblock" : `these ${n} roadblocks`} off the public map?
+          </DialogTitle>
+          <DialogDescription>
+            Check {n === 1 ? "it's" : "they're"} the right {n === 1 ? "one" : "ones"}. Once posted, the public no longer sees {n === 1 ? "it" : "them"} on the map or home page.
+          </DialogDescription>
+        </DialogHeader>
+
+        <ul className="space-y-2">
+          {leaving.map((c) => {
+            const rb = c.roadblock;
+            const k = KIND[c.kind];
+            return (
+              <li key={c.id} className="relative overflow-hidden rounded-2xl bg-white ring-1 ring-slate-200">
+                <span aria-hidden className={cn("absolute inset-y-0 left-0 w-1", k.bar)} />
+                <div className="flex items-start gap-2 py-2.5 pr-2 pl-4">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className={cn("inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold ring-1", k.chip)}>
+                        <k.icon className="size-3" strokeWidth={3} /> {c.kind === "done" ? "Mark as done" : "Remove"}
+                      </span>
+                      <p className="leading-snug font-semibold text-slate-900">{rb.road || "Untitled roadblock"}</p>
+                    </div>
+                    <p className="mt-1 text-xs leading-snug text-slate-500">
+                      {AREAS.find((a) => a.id === rb.areaId)?.name} · {CLOSURE_TYPES[closureTypeOf(rb)].label} · {formatPeriod(rb.startDate, rb.endDate)}
+                    </p>
+                  </div>
+                  {onShow && (
+                    <Button variant="ghost" size="sm" className="h-8 shrink-0 rounded-full px-2.5 text-blue-700 hover:bg-blue-50" onClick={() => onShow(c)}>
+                      <Crosshair /> Show
+                    </Button>
+                  )}
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+
+        <p className="text-xs leading-relaxed text-slate-500">
+          {also.length > 0 && <>This post also publishes {also.join(" and ")}. </>}
+          Taken down by mistake? Restore it from Past roadblocks.
+        </p>
+
+        <DialogFooter className="gap-2">
+          <Button variant="outline" className="rounded-full" onClick={onCancel} autoFocus>
+            Go back
+          </Button>
+          <Button className="rounded-full bg-rose-600 hover:bg-rose-700" onClick={onConfirm}>
+            <Send /> Yes, post
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 

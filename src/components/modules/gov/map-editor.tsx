@@ -7,6 +7,7 @@ import {
   Check,
   Eye,
   EyeOff,
+  History,
   Layers,
   LoaderCircle,
   Maximize2,
@@ -34,13 +35,14 @@ import {
   snapToRoad,
   traceAlongRoad,
 } from "@/lib/road-snap";
-import type { ClosureSegment, ClosureType, LatLng, PendingChange, Roadblock, TravelMode } from "@/lib/types";
+import type { ArchivedRoadblock, ClosureSegment, ClosureType, LatLng, PendingChange, Roadblock, TravelMode } from "@/lib/types";
 import { useMinuteNow } from "@/hooks/use-now";
-import { applyPending, newRoadblockId, newSegmentId, useStore } from "@/store/useStore";
+import { applyPending, newRoadblockId, newSegmentId, takesDown, useStore } from "@/store/useStore";
 import type { MapFocus } from "@/components/modules/map/base-layers";
 import type { DrawPreview, EditorLayers, RejectFlash } from "./editor-map";
 import { AuditReceipt } from "./audit-receipt";
 import { AnnouncementQueue } from "./announcement-queue";
+import { PastRoadblocks } from "./past-roadblocks";
 import { blankRoadblock, CLOSURE_PRESETS, RADIUS_MAX, type ClosurePreset } from "./closure-presets";
 
 /** Snapping to a road may land a few metres past the circle; allow that much. */
@@ -75,6 +77,7 @@ const DRAW_KINDS: { kind: ClosureType; label: string; hint: string; swatch: stri
 
 export function MapEditor() {
   const roadblocks = useStore((s) => s.roadblocks);
+  const archive = useStore((s) => s.archive);
   const pending = useStore((s) => s.pendingChanges);
   const queueChange = useStore((s) => s.queueChange);
   const now = useMinuteNow();
@@ -82,7 +85,8 @@ export function MapEditor() {
 
   const [enlarged, setEnlarged] = useState(false);
   const [tool, setTool] = useState<Tool>("select");
-  const [layers, setLayers] = useState<EditorLayers>({ line: true, stations: true, completed: false });
+  // Completed works stay on the public map until they're marked as done, so show them here too.
+  const [layers, setLayers] = useState<EditorLayers>({ line: true, stations: true, completed: true, past: false });
   const [draft, setDraft] = useState<Roadblock | null>(null);
   const [isNew, setIsNew] = useState(false);
   const [focus, setFocus] = useState<MapFocus | null>(null);
@@ -92,17 +96,21 @@ export function MapEditor() {
   const [, forceRender] = useReducer((n: number) => n + 1, 0);
 
   const preset = CLOSURE_PRESETS.find((p) => p.id === tool);
-  const queuedForRemoval = !!draft && pending.some((c) => c.kind === "remove" && c.roadblock.id === draft.id);
-  const canDraw = !!draft && !queuedForRemoval;
+  const draftChange = draft ? pending.find((c) => c.roadblock.id === draft.id) : undefined;
+  /** The open roadblock is queued to come off the public map. */
+  const takingDown = draftChange?.kind === "remove" || draftChange?.kind === "done" ? draftChange.kind : null;
+  /** The open roadblock is a past one (and not queued to come back): read-only, with Restore. */
+  const openPast = draft && draftChange?.kind !== "restore" ? (archive.find((a) => a.roadblock.id === draft.id) ?? null) : null;
+  const canDraw = !!draft && !takingDown && !openPast;
 
   // The pin being edited is drawn from the inspector draft, so moving it or
   // drawing segments shows immediately and Cancel puts everything back.
   const canvasPins = useMemo(() => {
-    if (!draft || queuedForRemoval) return draftMap;
+    if (!draft || takingDown || openPast) return draftMap;
     return draftMap.some((r) => r.id === draft.id)
       ? draftMap.map((r) => (r.id === draft.id ? draft : r))
       : [...draftMap, draft];
-  }, [draftMap, draft, queuedForRemoval]);
+  }, [draftMap, draft, takingDown, openPast]);
 
   // Clear the "not on a road" marker shortly after it appears.
   useEffect(() => {
@@ -175,17 +183,35 @@ export function MapEditor() {
 
   function handleSelect(id: string) {
     if (draft?.id === id) return;
-    const rb = draftMap.find((r) => r.id === id) ?? pending.find((c) => c.roadblock.id === id)?.roadblock;
-    if (rb) openRoadblock(rb, !roadblocks.some((r) => r.id === id));
+    const rb =
+      draftMap.find((r) => r.id === id) ??
+      pending.find((c) => c.roadblock.id === id)?.roadblock ??
+      archive.find((a) => a.roadblock.id === id)?.roadblock;
+    if (rb) openRoadblock(rb, pending.some((c) => c.kind === "add" && c.roadblock.id === id));
+  }
+
+  /** Zooms to a roadblock and its drawn stretches. */
+  function revealOnMap(rb: Roadblock, key: string) {
+    const segPoints = rb.segments?.flatMap((s) => s.path) ?? [];
+    if (segPoints.length) setFocus({ kind: "bounds", points: [rb, ...segPoints], key: `${key}-${rb.id}-${Date.now()}` });
+    else flyTo(rb);
   }
 
   /** Receipt line clicked → highlight that roadblock (and its drawn segments) on the canvas. */
   function handleReceiptSelect(change: PendingChange) {
-    const rb = change.kind === "remove" ? change.roadblock : (draftMap.find((r) => r.id === change.roadblock.id) ?? change.roadblock);
+    const rb = takesDown(change) ? change.roadblock : (draftMap.find((r) => r.id === change.roadblock.id) ?? change.roadblock);
     openRoadblock(rb, change.kind === "add");
-    const segPoints = rb.segments?.flatMap((s) => s.path) ?? [];
-    if (segPoints.length) setFocus({ kind: "bounds", points: [rb, ...segPoints], key: `rcpt-${rb.id}-${Date.now()}` });
-    else flyTo(rb);
+    revealOnMap(rb, "rcpt");
+  }
+
+  /** "Show on map" in Past roadblocks: turn the layer on and open it. */
+  function showPast(past: ArchivedRoadblock) {
+    const restoring = pending.find((c) => c.kind === "restore" && c.roadblock.id === past.roadblock.id);
+    setLayers((l) => ({ ...l, past: true }));
+    openRoadblock(restoring?.roadblock ?? past.roadblock, false);
+    revealOnMap(past.roadblock, "past");
+    // On phones the map sits above the list.
+    if (window.innerWidth < 1024) document.querySelector(".mu-editor-canvas")?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
   /**
@@ -473,7 +499,7 @@ export function MapEditor() {
       {/* ---------- Canvas ---------- */}
       <div
         className={cn(
-          "overflow-hidden bg-slate-200",
+          "mu-editor-canvas scroll-mt-24 overflow-hidden bg-slate-200",
           enlarged
             ? "mu-map-full fixed inset-0 z-40"
             : "relative isolate h-[620px] rounded-3xl shadow-sm ring-1 ring-slate-200 lg:sticky lg:top-24 lg:h-[calc(100vh-8rem)]",
@@ -482,6 +508,7 @@ export function MapEditor() {
         <EditorMap
           roadblocks={canvasPins}
           pending={pending}
+          archived={archive}
           placing={!!preset}
           selectedId={draft?.id ?? null}
           focus={focus}
@@ -529,7 +556,8 @@ export function MapEditor() {
                 [
                   ["line", "Mutiara LRT line"],
                   ["stations", "LRT stations"],
-                  ["completed", "Completed closures"],
+                  ["completed", "Completed (still public)"],
+                  ["past", `Past roadblocks (${archive.length})`],
                 ] as const
               ).map(([key, label]) => (
                 <button
@@ -571,7 +599,10 @@ export function MapEditor() {
                   </li>
                 ))}
                 <li className="flex items-center gap-2"><span className="size-2.5 rounded-full bg-rose-600" /> Overdue</li>
+                <li className="flex items-center gap-2"><span className="size-2.5 rounded-full bg-emerald-500" /> Completed (still public)</li>
+                <li className="flex items-center gap-2"><span className="size-2.5 rounded-full bg-slate-400" /> Past roadblock (off the map)</li>
                 <li className="flex items-center gap-2"><span className="rounded bg-blue-700 px-1 text-[10px] font-bold text-white">NEW</span> Queued change</li>
+                <li className="flex items-center gap-2"><span className="rounded bg-teal-600 px-1 text-[10px] font-bold text-white">DONE</span> Queued to mark as done</li>
               </ul>
             </>
           )}
@@ -647,6 +678,21 @@ export function MapEditor() {
         {/* Top-right actions */}
         {!drawing && (
           <div className={cn("absolute z-[500] flex gap-2", enlarged ? "top-20" : "top-3", inspectorOpen && !enlarged ? "right-[370px] max-md:hidden" : "right-3")}>
+            {/* Hidden while the inspector is open: there's no room beside the tool palette then. */}
+            {!enlarged && !inspectorOpen && archive.length > 0 && (
+              <Button
+                variant="outline"
+                onClick={() => setLayers((l) => ({ ...l, past: !l.past }))}
+                aria-pressed={layers.past}
+                aria-label={layers.past ? "Hide past roadblocks" : "Show past roadblocks"}
+                title={layers.past ? "Hide past roadblocks" : "Show past roadblocks (off the public map)"}
+                className={cn("h-10 rounded-full shadow-lg", layers.past ? "border-slate-700 bg-slate-700 text-white hover:bg-slate-800 hover:text-white" : "bg-white/95")}
+              >
+                <History />
+                <span className="max-sm:hidden">{layers.past ? "Hide past" : "Show past"}</span>
+                <span className={cn("rounded-full px-1.5 text-xs tabular-nums", layers.past ? "bg-white/20" : "bg-slate-200 text-slate-700")}>{archive.length}</span>
+              </Button>
+            )}
             {enlarged && !inspectorOpen && (
               <Button variant="outline" onClick={() => setShowReceipt((v) => !v)} className="h-10 rounded-full bg-white/95 shadow-lg">
                 <ReceiptText /> <span className="max-sm:hidden">{showReceipt ? "Hide receipt" : "Show receipt"}</span>
@@ -677,7 +723,8 @@ export function MapEditor() {
             <RoadblockInspector
               draft={draft}
               isNew={isNew}
-              queuedForRemoval={queuedForRemoval}
+              takingDown={takingDown}
+              archived={openPast}
               drawingKind={drawing?.kind ?? null}
               onCancel={closeInspector}
               onLocate={(rb) => flyTo(rb)}
@@ -702,7 +749,17 @@ export function MapEditor() {
               }}
               onRemove={(rb) => {
                 queueChange({ kind: "remove", roadblock: rb });
-                toast(`Queued: remove ${rb.road}`);
+                toast(`Queued: remove ${rb.road}`, { description: "It comes off the public map when you post. You can restore it from Past roadblocks." });
+                closeInspector();
+              }}
+              onMarkDone={(rb) => {
+                queueChange({ kind: "done", roadblock: rb });
+                toast.success(`Queued: mark ${rb.road} as done`, { description: "It comes off the public map and home page when you post." });
+                closeInspector();
+              }}
+              onRestore={(rb) => {
+                queueChange({ kind: "restore", roadblock: rb });
+                toast.success(`Queued: restore ${rb.road}`, { description: "It goes back on the public map when you post." });
                 closeInspector();
               }}
             />
@@ -732,6 +789,12 @@ export function MapEditor() {
       <div className="min-w-0 space-y-6">
         {!enlarged && <AuditReceipt selectedId={draft?.id} onSelect={handleReceiptSelect} />}
         <AnnouncementQueue />
+        <PastRoadblocks
+          shownOnMap={layers.past}
+          onShownOnMapChange={(past) => setLayers((l) => ({ ...l, past }))}
+          selectedId={openPast ? draft?.id : null}
+          onShow={showPast}
+        />
       </div>
     </div>
   );

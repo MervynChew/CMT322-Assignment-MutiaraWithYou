@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Check, Crosshair, Repeat2, Spline, TrafficCone, Trash2, X } from "lucide-react";
+import { ArchiveRestore, Check, CircleCheck, Crosshair, History, Repeat2, Spline, TrafficCone, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -13,7 +13,8 @@ import { cn } from "@/lib/utils";
 import { AREAS, CONSTRUCTION_PHASES } from "@/lib/mock-data";
 import { formatDistance, segmentReach } from "@/lib/geo";
 import { CLOSURE_TYPES, closureTypeOf } from "@/lib/closure-type";
-import type { ClosureSegment, ClosureType, Roadblock, TravelMode } from "@/lib/types";
+import { formatDate, formatPeriod, formatWindow } from "@/lib/time";
+import type { ArchivedRoadblock, ClosureSegment, ClosureType, Roadblock, TravelMode } from "@/lib/types";
 import { ModePicker, modesLabel, segmentModes } from "@/components/shared/travel-modes";
 import { CLOSURE_PRESETS, RADIUS_MAX, RADIUS_MIN, type ClosurePreset } from "./closure-presets";
 
@@ -37,10 +38,13 @@ const fromDateInput = (v: string) => new Date(`${v}T00:00:00`).toISOString();
 export function RoadblockInspector({
   draft,
   isNew,
-  queuedForRemoval,
+  takingDown,
+  archived,
   onCancel,
   onSave,
   onRemove,
+  onMarkDone,
+  onRestore,
   onLocate,
   drawingKind,
   onDraw,
@@ -55,10 +59,16 @@ export function RoadblockInspector({
 }: {
   draft: Roadblock;
   isNew: boolean;
-  queuedForRemoval: boolean;
+  /** Queued in the receipt to come off the public map. */
+  takingDown: "remove" | "done" | null;
+  /** Set when this is a past roadblock (off the public map): shown read-only with Restore. */
+  archived: ArchivedRoadblock | null;
   onCancel: () => void;
   onSave: (rb: Roadblock) => void;
   onRemove: (rb: Roadblock) => void;
+  /** Completed works: take the roadblock off the public map (kept under Past roadblocks). */
+  onMarkDone: (rb: Roadblock) => void;
+  onRestore: (rb: Roadblock) => void;
   onLocate: (rb: Roadblock) => void;
   /** Kind of segment currently being drawn on the canvas, if any. */
   drawingKind: ClosureType | null;
@@ -120,22 +130,38 @@ export function RoadblockInspector({
     onPatch(patch);
   }
 
-  function save() {
-    if (form.road.trim().length < 3) return setError("Enter the road name.");
-    if (form.endDate < form.startDate) return setError("End date must be after the start date.");
-    setError(null);
+  /** The form as a roadblock, or null (with the error shown) when it isn't valid yet. */
+  function validated(): Roadblock | null {
+    const problem =
+      form.road.trim().length < 3 ? "Enter the road name." : form.endDate < form.startDate ? "End date must be after the start date." : null;
+    setError(problem);
+    if (problem) return null;
     // With drawn segments, the overall closure follows them (any full block makes it full).
-    onSave({ ...form, road: form.road.trim(), closure: derivedClosure ?? form.closure });
+    return { ...form, road: form.road.trim(), closure: derivedClosure ?? form.closure };
   }
+
+  function save() {
+    const rb = validated();
+    if (rb) onSave(rb);
+  }
+
+  function markDone() {
+    const rb = validated();
+    if (rb) onMarkDone({ ...rb, status: "completed" });
+  }
+
+  const canMarkDone = !isNew && !takingDown && !archived && form.status === "completed";
 
   const sel = "h-9 w-full rounded-xl data-[size=default]:h-9";
 
   return (
     <div className={cn("flex h-full flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl", className)}>
       <header className="flex items-start gap-3 border-b border-slate-100 p-4">
-        <span aria-hidden className="mt-1 size-3 shrink-0 rounded-full ring-4 ring-slate-100" style={{ background: CLOSURE_TYPES[type].color }} />
+        <span aria-hidden className="mt-1 size-3 shrink-0 rounded-full ring-4 ring-slate-100" style={{ background: archived ? "#94a3b8" : CLOSURE_TYPES[type].color }} />
         <div className="min-w-0 flex-1">
-          <p className="text-xs font-semibold tracking-wider text-blue-700 uppercase">{isNew ? "New roadblock" : "Edit roadblock"}</p>
+          <p className={cn("text-xs font-semibold tracking-wider uppercase", archived ? "text-slate-500" : "text-blue-700")}>
+            {archived ? "Past roadblock" : isNew ? "New roadblock" : "Edit roadblock"}
+          </p>
           <h3 className="truncate font-semibold">{form.road || "Untitled roadblock"}</h3>
         </div>
         <Button variant="ghost" size="icon-sm" className="rounded-full" onClick={() => onLocate(form)} aria-label="Zoom to pin">
@@ -146,9 +172,14 @@ export function RoadblockInspector({
         </Button>
       </header>
 
-      {queuedForRemoval ? (
-        <div className="flex-1 p-5 text-sm text-slate-600">
-          This roadblock is queued for removal. Undo it from the audit receipt to edit it again.
+      {archived ? (
+        <PastSummary archived={archived} />
+      ) : takingDown ? (
+        <div className="flex-1 p-5 text-sm leading-relaxed text-slate-600">
+          {takingDown === "done"
+            ? "This roadblock is queued to be marked as done. When you post, it comes off the public map and moves to Past roadblocks."
+            : "This roadblock is queued for removal. When you post, it comes off the public map and moves to Past roadblocks."}{" "}
+          Undo it from the audit receipt to edit it again.
         </div>
       ) : (
         <div className="flex-1 space-y-4 overflow-y-auto p-4">
@@ -476,21 +507,75 @@ export function RoadblockInspector({
         </div>
       )}
 
+      {canMarkDone && (
+        <div className="flex items-center gap-2.5 border-t border-teal-100 bg-teal-50/80 px-3 py-2.5">
+          <CircleCheck aria-hidden className="size-4 shrink-0 text-teal-600" />
+          <p className="min-w-0 flex-1 text-xs leading-snug text-teal-950">
+            <b className="font-semibold">Works completed.</b> Take it off the public map and home page. You can restore it later.
+          </p>
+          <Button size="sm" className="shrink-0 rounded-full bg-teal-600 hover:bg-teal-700" onClick={markDone}>
+            Mark as done
+          </Button>
+        </div>
+      )}
+
       <footer className="flex items-center gap-2 border-t border-slate-100 p-3">
-        {!isNew && !queuedForRemoval && (
+        {!isNew && !takingDown && !archived && (
           <Button variant="destructive" size="sm" className="rounded-full" onClick={() => onRemove(form)}>
             <Trash2 /> Remove
           </Button>
         )}
         <div className="ml-auto flex gap-2">
           <Button variant="ghost" size="sm" className="rounded-full" onClick={onCancel}>Cancel</Button>
-          {!queuedForRemoval && (
-            <Button size="sm" className="rounded-full bg-blue-700 hover:bg-blue-800" onClick={save}>
-              {isNew ? "Add to receipt" : "Queue changes"}
+          {archived ? (
+            <Button size="sm" className="rounded-full bg-blue-700 hover:bg-blue-800" onClick={() => onRestore(archived.roadblock)}>
+              <ArchiveRestore /> Restore
             </Button>
+          ) : (
+            !takingDown && (
+              <Button size="sm" className="rounded-full bg-blue-700 hover:bg-blue-800" onClick={save}>
+                {isNew ? "Add to receipt" : "Queue changes"}
+              </Button>
+            )
           )}
         </div>
       </footer>
+    </div>
+  );
+}
+
+/** Read-only view of a past roadblock: why it came off the map, and what it was. */
+export function PastSummary({ archived }: { archived: ArchivedRoadblock }) {
+  const rb = archived.roadblock;
+  const type = closureTypeOf(rb);
+  const segs = rb.segments ?? [];
+  const rows: [string, string][] = [
+    ["Area", AREAS.find((a) => a.id === rb.areaId)?.name ?? "—"],
+    ["Closure", `${CLOSURE_TYPES[type].label}${rb.dailyWindow ? ` · ${formatWindow(rb.dailyWindow)}` : ""}`],
+    ["Period", formatPeriod(rb.startDate, rb.endDate)],
+    ["Status", rb.status === "completed" ? "Completed" : rb.status === "scheduled" ? "Scheduled" : "Active"],
+    ["Drawn", segs.length ? `${segs.length} stretch${segs.length === 1 ? "" : "es"} · ${formatDistance(segs.reduce((n, x) => n + x.lengthM, 0))}` : "Pin only"],
+  ];
+  return (
+    <div className="flex-1 space-y-4 overflow-y-auto p-4">
+      <div className="rounded-2xl bg-slate-100 p-3">
+        <p className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+          <History aria-hidden className="size-4 text-slate-500" />
+          {archived.reason === "done" ? "Marked as done" : "Removed"} on {formatDate(archived.at)}
+        </p>
+        <p className="mt-1 text-xs leading-snug text-slate-600">
+          By {archived.by}. It no longer shows on the public map or home page. Restore it to put it back; it goes live when you post.
+        </p>
+      </div>
+      <dl className="divide-y divide-slate-100 rounded-2xl border border-slate-200 text-sm">
+        {rows.map(([label, value]) => (
+          <div key={label} className="flex gap-3 px-3 py-2">
+            <dt className="w-16 shrink-0 text-xs text-slate-500">{label}</dt>
+            <dd className="min-w-0 flex-1 text-slate-800">{value}</dd>
+          </div>
+        ))}
+      </dl>
+      {rb.description && <p className="text-sm leading-relaxed text-slate-600">{rb.description}</p>}
     </div>
   );
 }

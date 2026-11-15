@@ -1,6 +1,7 @@
 import type {
   ActivityItem,
   Announcement,
+  ArchivedRoadblock,
   Area,
   LatLng,
   Place,
@@ -195,6 +196,7 @@ const ADMIN_TEAM_IDS = ["u-admin-2", "u-admin-3", ADMIN_USER_ID];
 
 export type Seed = {
   roadblocks: Roadblock[];
+  archive: ArchivedRoadblock[];
   reports: Report[];
   announcements: Announcement[];
   users: User[];
@@ -400,6 +402,34 @@ export function buildSeed(shiftDays = 0): Seed {
     },
   ];
 
+  // Off the public map, kept so admins can restore it.
+  const archive: ArchivedRoadblock[] = [
+    {
+      reason: "done",
+      at: d(-38, 16, 20),
+      by: ADMIN_NAMES["u-admin-2"],
+      roadblock: {
+        id: "rb-00",
+        road: "Lintang Bayan Lepas",
+        areaId: "bayan-lepas",
+        lat: 5.293514,
+        lng: 100.286173,
+        closure: "partial",
+        modes: ["car", "motorcycle"],
+        radiusM: 150,
+        status: "completed",
+        startDate: d(-150),
+        endDate: d(-40),
+        dailyWindow: { start: "09:00", end: "16:00" },
+        phaseIndex: 5,
+        description: "Daytime lane closure while utilities were moved for the Sungai Tiram station entrance. Works finished and the lane reopened.",
+        detour: "—",
+        image: SITE_IMAGES[2],
+        lastUpdated: d(-38, 16, 20),
+      },
+    },
+  ];
+
   // Pins sit on the traced road; each roadblock carries its drawn closure segments.
   for (const rb of roadblocks) {
     const seeded = SEED_SEGMENTS[rb.id];
@@ -542,9 +572,10 @@ export function buildSeed(shiftDays = 0): Seed {
     { id: "ac-6", at: d(-2, 10), kind: "post", text: "Moved to Deck Launching: Jalan Bayan Lepas" },
     { id: "ac-7", at: d(-3, 10), kind: "announcement", text: "Published “Gat Lebuh Macallum closure begins next week”" },
     { id: "ac-8", at: d(-4, 11), kind: "post", text: "Added Gat Lebuh Macallum full closure (scheduled)" },
+    { id: "ac-9", at: d(-38, 16, 20), kind: "post", text: "Marked Lintang Bayan Lepas as done" },
   ];
 
-  return { roadblocks, reports, announcements, users, activity };
+  return { roadblocks, archive, reports, announcements, users, activity };
 }
 
 export const REPORTER_NAMES: Record<string, string> = {

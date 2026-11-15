@@ -154,10 +154,28 @@ export type User = {
   };
 };
 
+/**
+ * A roadblock taken off the public map and home page: marked done once its
+ * works finished, or removed by an admin. Admins still see it under Past
+ * roadblocks and can restore it (e.g. after removing the wrong one).
+ */
+export type ArchivedRoadblock = {
+  roadblock: Roadblock;
+  reason: "done" | "removed";
+  at: string; // ISO
+  /** Admin who posted it. */
+  by: string;
+};
+
 export type PendingChange =
   | { id: string; kind: "add"; at: string; roadblock: Roadblock }
   | { id: string; kind: "edit"; at: string; roadblock: Roadblock; before: Roadblock }
-  | { id: string; kind: "remove"; at: string; roadblock: Roadblock };
+  /** Taken off the public map; kept under Past roadblocks. */
+  | { id: string; kind: "remove"; at: string; roadblock: Roadblock }
+  /** Completed works taken off the public map; kept under Past roadblocks. */
+  | { id: string; kind: "done"; at: string; roadblock: Roadblock; before: Roadblock }
+  /** A past roadblock put back on the public map. */
+  | { id: string; kind: "restore"; at: string; roadblock: Roadblock };
 
 /** Announcement drafted in the Post tab, published together with roadblock changes. */
 export type PendingAnnouncement = Omit<Announcement, "date" | "author">;

@@ -11,6 +11,7 @@ import {
 import type {
   ActivityItem,
   Announcement,
+  ArchivedRoadblock,
   PendingAnnouncement,
   LatLng,
   PendingChange,
@@ -29,10 +30,7 @@ const uid = (prefix: string) => `${prefix}-${Date.now().toString(36)}${(counter+
 /** Where the viewer is, from their device (used for nearby alerts). */
 export type UserPosition = LatLng & { label: string; accuracy?: number; at: string };
 
-type NewChange =
-  | { kind: "add"; roadblock: Roadblock }
-  | { kind: "edit"; roadblock: Roadblock }
-  | { kind: "remove"; roadblock: Roadblock };
+type NewChange = { kind: PendingChange["kind"]; roadblock: Roadblock };
 
 type State = {
   /** True once the seed has been shifted to the viewer's current date. */
@@ -47,7 +45,10 @@ type State = {
   /** When the viewer last opened the announcements list (drives the unread badge). */
   announcementsSeenAt: string | null;
   users: User[];
+  /** Roadblocks the public sees (map, home page, report form). */
   roadblocks: Roadblock[];
+  /** Past roadblocks: off the public map, but kept so admins can restore them. Newest first. */
+  archive: ArchivedRoadblock[];
   reports: Report[];
   announcements: Announcement[];
   pendingChanges: PendingChange[];
@@ -189,37 +190,48 @@ export const useStore = create<Store>()(
           const at = new Date().toISOString();
           const id = change.roadblock.id;
           const existing = s.pendingChanges.find((c) => c.roadblock.id === id);
-          let pending = s.pendingChanges;
+          /** Swaps the existing receipt line for `next` (or drops it). */
+          const replace = (next: PendingChange | null) => ({
+            pendingChanges: next
+              ? s.pendingChanges.map((c) => (c === existing ? next : c))
+              : s.pendingChanges.filter((c) => c !== existing),
+          });
+          const off = change.kind === "remove" || change.kind === "done";
 
           if (existing) {
-            // Collapse multiple edits to the same roadblock into one receipt line.
-            if (existing.kind === "add") {
-              pending =
-                change.kind === "remove"
-                  ? pending.filter((c) => c !== existing)
-                  : pending.map((c) => (c === existing ? { ...existing, roadblock: change.roadblock, at } : c));
-              return { pendingChanges: pending };
+            // Collapse multiple changes to the same roadblock into one receipt line.
+            switch (existing.kind) {
+              case "add":
+              case "restore":
+                // Not on the public map yet: taking it down again just drops the line.
+                return off ? replace(null) : replace({ ...existing, roadblock: change.roadblock, at });
+              case "edit":
+                // Removing discards the unposted edits; marking done keeps them.
+                if (change.kind === "remove") return replace({ id: existing.id, kind: "remove", at, roadblock: existing.before });
+                if (change.kind === "done") return replace({ id: existing.id, kind: "done", at, roadblock: change.roadblock, before: existing.before });
+                return replace({ ...existing, roadblock: change.roadblock, at });
+              default:
+                return {}; // already queued to come off the map
             }
-            if (existing.kind === "edit") {
-              pending = pending.map((c) =>
-                c === existing
-                  ? change.kind === "remove"
-                    ? { id: existing.id, kind: "remove", at, roadblock: existing.before }
-                    : { ...existing, roadblock: change.roadblock, at }
-                  : c,
-              );
-              return { pendingChanges: pending };
-            }
-            return {}; // already queued for removal
           }
 
-          if (change.kind === "edit") {
-            const before = s.roadblocks.find((r) => r.id === id);
-            if (!before) return {};
-            return { pendingChanges: [...pending, { id: uid("chg"), kind: "edit", at, roadblock: change.roadblock, before }] };
+          const live = s.roadblocks.find((r) => r.id === id);
+          const line = (c: PendingChange) => ({ pendingChanges: [...s.pendingChanges, c] });
+          switch (change.kind) {
+            case "edit":
+            case "done":
+              if (!live) return {};
+              return line({ id: uid("chg"), kind: change.kind, at, roadblock: change.roadblock, before: live });
+            case "remove":
+              // Keep the roadblock as it is live (not with unsaved edits), so a restore brings that back.
+              return live ? line({ id: uid("chg"), kind: "remove", at, roadblock: live }) : {};
+            case "restore":
+              if (!s.archive.some((a) => a.roadblock.id === id)) return {};
+              return line({ id: uid("chg"), kind: "restore", at, roadblock: change.roadblock });
+            default:
+              return line({ id: uid("chg"), kind: "add", at, roadblock: change.roadblock });
           }
-          return { pendingChanges: [...pending, { id: uid("chg"), at, ...change }] };
-    }),
+        }),
 
   discardChange: (id) => set((s) => ({ pendingChanges: s.pendingChanges.filter((c) => c.id !== id) })),
   clearChanges: () => set({ pendingChanges: [], pendingAnnouncements: [] }),
@@ -229,22 +241,41 @@ export const useStore = create<Store>()(
     set((s) => ({ pendingAnnouncements: s.pendingAnnouncements.filter((a) => a.id !== id) })),
 
   commitChanges: () => {
-    const { pendingChanges, pendingAnnouncements, roadblocks } = get();
+    const s0 = get();
+    const { pendingChanges, pendingAnnouncements, roadblocks } = s0;
     const now = new Date().toISOString();
+    const by = adminName(s0);
     let next = [...roadblocks];
+    let archive = [...s0.archive];
     const log: ActivityItem[] = [];
     for (const c of pendingChanges) {
-      if (c.kind === "add") next.push({ ...c.roadblock, lastUpdated: now });
-      if (c.kind === "edit")
-        next = next.map((r) => (r.id === c.roadblock.id ? { ...c.roadblock, lastUpdated: now } : r));
-      if (c.kind === "remove") next = next.filter((r) => r.id !== c.roadblock.id);
-      const verb = c.kind === "add" ? "Added" : c.kind === "edit" ? "Updated" : "Removed";
-      log.push({ id: uid("ac"), at: now, kind: "post", text: `${verb} ${c.roadblock.road}` });
+      const id = c.roadblock.id;
+      switch (c.kind) {
+        case "add":
+          next.push({ ...c.roadblock, lastUpdated: now });
+          break;
+        case "edit":
+          next = next.map((r) => (r.id === id ? { ...c.roadblock, lastUpdated: now } : r));
+          break;
+        case "remove":
+        case "done": {
+          next = next.filter((r) => r.id !== id);
+          const roadblock = c.kind === "done" ? { ...c.roadblock, status: "completed" as const, lastUpdated: now } : c.roadblock;
+          archive = [{ roadblock, reason: c.kind === "done" ? "done" : "removed", at: now, by }, ...archive.filter((a) => a.roadblock.id !== id)];
+          break;
+        }
+        case "restore":
+          archive = archive.filter((a) => a.roadblock.id !== id);
+          next.push({ ...c.roadblock, lastUpdated: now });
+          break;
+      }
+      log.push({ id: uid("ac"), at: now, kind: "post", text: POST_LOG[c.kind](c.roadblock.road) });
     }
     const published: Announcement[] = pendingAnnouncements.map((a) => ({ ...a, date: now, author: "Mutiara Line Ops" }));
     for (const a of published) log.push({ id: uid("ac"), at: now, kind: "announcement", text: `Published “${a.title}”` });
     set((s) => ({
       roadblocks: next,
+      archive,
       pendingChanges: [],
       pendingAnnouncements: [],
       announcements: [...published.reverse(), ...s.announcements],
@@ -363,10 +394,29 @@ export const useStore = create<Store>()(
 
 // ---------- Selectors & derived helpers ----------
 
+const adminName = (s: State) => s.users.find((u) => u.id === ADMIN_USER_ID)?.name ?? "Admin";
+
 /** Log line attributed to the signed-in admin. */
 function logEntry(s: State, action: ReportLogEntry["action"]): ReportLogEntry {
-  const admin = s.users.find((u) => u.id === ADMIN_USER_ID);
-  return { at: new Date().toISOString(), action, adminId: ADMIN_USER_ID, adminName: admin?.name ?? "Admin" };
+  return { at: new Date().toISOString(), action, adminId: ADMIN_USER_ID, adminName: adminName(s) };
+}
+
+/** Activity feed wording for each posted roadblock change. */
+const POST_LOG: Record<PendingChange["kind"], (road: string) => string> = {
+  add: (road) => `Added ${road}`,
+  edit: (road) => `Updated ${road}`,
+  remove: (road) => `Removed ${road}`,
+  done: (road) => `Marked ${road} as done`,
+  restore: (road) => `Restored ${road}`,
+};
+
+/** Changes that take a roadblock off the public map (Post asks before posting these). */
+export const takesDown = (c: PendingChange) => c.kind === "remove" || c.kind === "done";
+
+/** A roadblock by id, including past ones (reports stay linked to a roadblock after it comes off the map). */
+export function findRoadblock(s: Pick<State, "roadblocks" | "archive">, id: string | undefined): Roadblock | undefined {
+  if (!id) return undefined;
+  return s.roadblocks.find((r) => r.id === id) ?? s.archive.find((a) => a.roadblock.id === id)?.roadblock;
 }
 
 /** Placeholder shown (blurred) behind the sign-in prompt for guests. */
@@ -389,9 +439,9 @@ export const useSessionUserId = () => useStore((s) => s.sessionUserId ?? CURRENT
 export function applyPending(roadblocks: Roadblock[], pending: PendingChange[]): Roadblock[] {
   let next = [...roadblocks];
   for (const c of pending) {
-    if (c.kind === "add") next.push(c.roadblock);
+    if (c.kind === "add" || c.kind === "restore") next.push(c.roadblock);
     if (c.kind === "edit") next = next.map((r) => (r.id === c.roadblock.id ? c.roadblock : r));
-    if (c.kind === "remove") next = next.filter((r) => r.id !== c.roadblock.id);
+    if (takesDown(c)) next = next.filter((r) => r.id !== c.roadblock.id);
   }
   return next;
 }

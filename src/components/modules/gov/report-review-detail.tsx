@@ -12,6 +12,7 @@ import {
   Mail,
   MapPin,
   MapPinned,
+  History,
   Star,
   Tag,
   UserRound,
@@ -22,9 +23,9 @@ import { cn } from "@/lib/utils";
 import { AREAS, REPORTER_NAMES, reporterName } from "@/lib/mock-data";
 import { formatDistance } from "@/lib/geo";
 import { formatDateTime, isOverdue, relativeTime } from "@/lib/time";
-import type { Report, Roadblock } from "@/lib/types";
+import type { ArchivedRoadblock, Report, Roadblock } from "@/lib/types";
 import { useMinuteNow } from "@/hooks/use-now";
-import { useStore } from "@/store/useStore";
+import { findRoadblock, useStore } from "@/store/useStore";
 import { categoryLabel, HandlingLog, ReportSheet } from "@/components/shared/report-paper";
 
 function reporterEmail(userId: string, users: { id: string; email: string }[]) {
@@ -38,12 +39,15 @@ function reporterEmail(userId: string, users: { id: string; email: string }[]) {
 function SummaryFrame({
   report,
   roadblock,
+  past,
   email,
   siblings,
   onOpen,
 }: {
   report: Report;
   roadblock?: Roadblock;
+  /** Set when the roadblock has since come off the public map. */
+  past?: ArchivedRoadblock;
   email: string;
   siblings: Report[];
   onOpen: (id: string) => void;
@@ -141,7 +145,13 @@ function SummaryFrame({
         <div className="rounded-3xl border border-slate-200/70 bg-white p-5 shadow-sm">
           <p className="mb-2 text-xs font-semibold tracking-wider text-slate-500 uppercase">Roadblock on record</p>
           <div className="flex flex-wrap gap-1.5">
-            <StatusBadge status={roadblock.status} overdue={now !== null && isOverdue(roadblock, now)} />
+            {past ? (
+              <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700">
+                <History className="size-3" /> Past roadblock · {past.reason === "done" ? "marked as done" : "removed"} {formatDateTime(past.at)}
+              </span>
+            ) : (
+              <StatusBadge status={roadblock.status} overdue={now !== null && isOverdue(roadblock, now)} />
+            )}
             <ClosureBadge roadblock={roadblock} />
           </div>
           <p className="mt-2 text-sm text-slate-600">{roadblock.description}</p>
@@ -182,9 +192,10 @@ export function ReportReviewDetail({
   orderedIds: string[];
 }) {
   const reports = useStore((s) => s.reports);
-  const roadblocks = useStore((s) => s.roadblocks);
-  const users = useStore((s) => s.users);
   const report = reports.find((r) => r.id === reportId);
+  const roadblock = useStore((s) => findRoadblock(s, report?.roadblockId));
+  const past = useStore((s) => s.archive.find((a) => a.roadblock.id === report?.roadblockId));
+  const users = useStore((s) => s.users);
 
   if (!report) {
     return (
@@ -197,7 +208,6 @@ export function ReportReviewDetail({
     );
   }
 
-  const roadblock = roadblocks.find((r) => r.id === report.roadblockId);
   const reporter = reporterName(report.userId, users);
   const email = reporterEmail(report.userId, users);
   const siblings = reports.filter((r) => r.roadblockId === report.roadblockId && r.id !== report.id);
@@ -223,7 +233,7 @@ export function ReportReviewDetail({
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[340px_minmax(0,1fr)] lg:items-start">
-        <SummaryFrame report={report} roadblock={roadblock} email={email} siblings={siblings} onOpen={onOpen} />
+        <SummaryFrame report={report} roadblock={roadblock} past={past} email={email} siblings={siblings} onOpen={onOpen} />
         <div className="space-y-8">
           <p className="text-xs font-semibold tracking-widest text-blue-800/70 uppercase">
             Submitted form{report.entries.length > 1 ? ` · ${report.entries.length - 1} continuation sheet${report.entries.length > 2 ? "s" : ""}` : ""}

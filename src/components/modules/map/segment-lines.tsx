@@ -28,12 +28,15 @@ export const SegmentLines = memo(function SegmentLines({
   segments = roadblock.segments ?? [],
   emphasis = false,
   dim = false,
+  muted = false,
   onClick,
 }: {
   roadblock: Roadblock;
   segments?: ClosureSegment[];
   emphasis?: boolean;
   dim?: boolean;
+  /** Past roadblock on the admin canvas: drawn in grey. */
+  muted?: boolean;
   onClick?: (roadblockId: string) => void;
 }) {
   const w = emphasis ? 8 : 6;
@@ -41,7 +44,7 @@ export const SegmentLines = memo(function SegmentLines({
   const paths = useMemo(() => segments.map((seg) => seg.path.map((p) => [p.lat, p.lng] as [number, number])), [segments]);
   return segments.map((seg, i) => {
     const positions = paths[i];
-    const color = segmentColor(roadblock, seg);
+    const color = muted ? "#94a3b8" : segmentColor(roadblock, seg);
     const full = seg.kind === "full";
     return (
       <Fragment key={seg.id}>

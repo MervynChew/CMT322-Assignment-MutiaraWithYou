@@ -1,7 +1,25 @@
 // Client-only: imports Leaflet, so only load from components rendered with `ssr: false`.
 import L from "leaflet";
 import { CLOSURE_TYPES, closureTypeOf, type ClosureTypeId } from "@/lib/closure-type";
-import type { Roadblock } from "@/lib/types";
+import type { PendingChange, Roadblock } from "@/lib/types";
+
+type PinOptions = {
+  selected?: boolean;
+  overdue?: boolean;
+  /** Queued in the admin's receipt. */
+  pending?: PendingChange["kind"];
+  /** Past roadblock (admin canvas only): grey and faded. */
+  archived?: boolean;
+};
+
+/** Small corner badge for a queued change. */
+const PENDING_BADGE: Record<PendingChange["kind"], { text: string; bg: string }> = {
+  add: { text: "NEW", bg: "#1d4ed8" },
+  edit: { text: "EDIT", bg: "#1d4ed8" },
+  restore: { text: "BACK", bg: "#1d4ed8" },
+  done: { text: "DONE", bg: "#0d9488" },
+  remove: { text: "DEL", bg: "#e11d48" },
+};
 
 const CONE_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M16.05 10.966a5 2.5 0 0 1-8.1 0"/><path d="m16.923 14.049 4.48 2.04a1 1 0 0 1 .001 1.831l-8.574 3.9a2 2 0 0 1-1.66 0l-8.574-3.91a1 1 0 0 1 0-1.83l4.484-2.04"/><path d="M16.949 14.14a5 2.5 0 1 1-9.9 0L10.063 3.5a2 2 0 0 1 3.874 0z"/><path d="M9.194 6.57a5 2.5 0 0 0 5.61 0"/></svg>`;
 
@@ -13,7 +31,8 @@ const CALENDAR_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="10" height=
 const TYPE_BADGE: Partial<Record<ClosureTypeId, string>> = { day: SUN_SVG, night: MOON_SVG, scheduled: CALENDAR_SVG };
 
 /** Pin colour: overdue and completed first, otherwise the closure type's colour. */
-export function pinColor(rb: Roadblock, overdue = false) {
+export function pinColor(rb: Roadblock, overdue = false, archived = false) {
+  if (archived) return { bg: "#94a3b8", glow: "rgba(148,163,184,.3)" };
   if (overdue) return { bg: "#e11d48", glow: "rgba(225,29,72,.35)" };
   if (rb.status === "completed") return { bg: "#10b981", glow: "rgba(16,185,129,.3)" };
   const t = CLOSURE_TYPES[closureTypeOf(rb)];
@@ -27,10 +46,10 @@ const iconCache = new Map<string, L.DivIcon>();
 
 export function roadblockIcon(
   rb: Roadblock,
-  opts: { selected?: boolean; overdue?: boolean; pending?: "add" | "edit" | "remove" } = {},
+  opts: PinOptions = {},
 ) {
-  const { bg } = pinColor(rb, opts.overdue);
-  const key = [bg, closureTypeOf(rb), rb.status, !!opts.selected, opts.pending ?? ""].join("|");
+  const { bg } = pinColor(rb, opts.overdue, opts.archived);
+  const key = [bg, closureTypeOf(rb), rb.status, !!opts.selected, opts.pending ?? "", !!opts.archived].join("|");
   let icon = iconCache.get(key);
   if (!icon) {
     icon = buildRoadblockIcon(rb, opts);
@@ -39,27 +58,27 @@ export function roadblockIcon(
   return icon;
 }
 
-function buildRoadblockIcon(
-  rb: Roadblock,
-  opts: { selected?: boolean; overdue?: boolean; pending?: "add" | "edit" | "remove" },
-) {
-  const { bg, glow } = pinColor(rb, opts.overdue);
+function buildRoadblockIcon(rb: Roadblock, opts: PinOptions) {
+  const { bg, glow } = pinColor(rb, opts.overdue, opts.archived);
   const size = opts.selected ? 44 : 36;
-  const pulse = rb.status === "active" && !opts.pending ? `<span class="pulse" style="background:${glow}"></span>` : "";
+  const pulse = rb.status === "active" && !opts.pending && !opts.archived ? `<span class="pulse" style="background:${glow}"></span>` : "";
   const ring = opts.selected ? "#1e40af" : "#ffffff";
   // Sun / moon / calendar badge so timed and upcoming works read differently from 24-hour closures.
-  const glyph = rb.status !== "completed" ? TYPE_BADGE[closureTypeOf(rb)] : undefined;
+  const glyph = rb.status !== "completed" && !opts.archived ? TYPE_BADGE[closureTypeOf(rb)] : undefined;
   const typeBadge = glyph
     ? `<span style="position:absolute;bottom:-2px;right:-2px;width:18px;height:18px;border-radius:999px;background:white;color:${bg};display:flex;align-items:center;justify-content:center;box-shadow:0 1px 4px rgba(15,23,42,.35)">${glyph}</span>`
     : "";
-  const pendingBadge = opts.pending
-    ? `<span style="position:absolute;top:-4px;right:-4px;background:${opts.pending === "remove" ? "#e11d48" : "#1d4ed8"};color:white;font-size:9px;font-weight:700;border-radius:999px;padding:1px 5px;border:2px solid white">${opts.pending === "add" ? "NEW" : opts.pending === "edit" ? "EDIT" : "DEL"}</span>`
+  const badge = opts.pending ? PENDING_BADGE[opts.pending] : undefined;
+  const pendingBadge = badge
+    ? `<span style="position:absolute;top:-4px;right:-4px;background:${badge.bg};color:white;font-size:9px;font-weight:700;border-radius:999px;padding:1px 5px;border:2px solid white">${badge.text}</span>`
     : "";
+  // Coming off the map, or already off it: faded.
+  const faded = opts.pending === "remove" || opts.pending === "done" ? "opacity:.5" : opts.archived ? "opacity:.75" : "";
   return L.divIcon({
     className: "mu-pin",
     iconSize: [size, size],
     iconAnchor: [size / 2, size / 2],
-    html: `<div style="position:relative;width:${size}px;height:${size}px;display:flex;align-items:center;justify-content:center;${opts.pending === "remove" ? "opacity:.45" : ""}">
+    html: `<div style="position:relative;width:${size}px;height:${size}px;display:flex;align-items:center;justify-content:center;${faded}">
       ${pulse}
       <div style="position:relative;width:${size - 8}px;height:${size - 8}px;border-radius:999px;background:${bg};color:white;display:flex;align-items:center;justify-content:center;border:3px solid ${ring};box-shadow:0 6px 16px rgba(15,23,42,.35);transition:all .2s">${CONE_SVG}</div>
       ${typeBadge}
